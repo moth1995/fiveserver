@@ -412,3 +412,13 @@ class MatchData:
             _writeStreak(match.away_profile.id, False)
         return matchId
 
+    @defer.inlineCallbacks
+    def getLast10Matches(self, profileId):
+        sql = ('SELECT profile_id_home, profile_id_away, '
+            'score_home, score_away, team_id_home, team_id_away, played_on '
+            'FROM matches '
+            'WHERE profile_id_home=%s OR profile_id_away=%s '
+            'ORDER BY id DESC LIMIT 10')
+        rows = yield self.dbController.dbRead(0, sql, profileId, profileId)
+        defer.returnValue(rows)
+
