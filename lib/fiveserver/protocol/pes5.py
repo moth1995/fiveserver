@@ -321,8 +321,65 @@ class LoginService(PacketDispatcher):
     def do_3050(self, pkt):
         self.sendZeros(0x3052,0x47)
 
+    @defer.inlineCallbacks
     def getMatchResults_3070(self, pkt):
-        self.sendZeros(0x3072,4)
+        """
+        Handler for the message packet 0x3070 so the player can check their last 10 matches results
+        structs generated from this function 0083df90 on pes5.exe
+        
+        typedef struct{
+            byte idx;
+            char date[19];
+            char opponentName[16];
+            int opponentId;
+            byte homeScore;
+            byte awayScore;
+            ushort homeTeamId;
+            ushort awayTeamId;
+        } MATCH_RESULT;
+
+        typedef struct {
+            byte zero;
+            MATCH_RESULT matchResults[10];
+        }
+        """
+
+        id = struct.unpack('!i',pkt.data[0:4])[0]
+        index, self._user.profile = self._user.getProfileById(id)
+        
+        if self._user.profile is None:
+            log.msg('ERROR: user profile not found for id: %d' % id)
+            self.sendZeros(0x3072,4)
+            defer.returnValue(None)
+
+        matches = yield self.factory.matchData.getLast10Matches(id)
+
+        if not matches:
+            log.msg('INFO: not matches found for profile id: %d' % id)
+            self.sendZeros(0x3072,4)
+            defer.returnValue(None)
+
+        data = struct.pack('!I', 0)
+
+        for index, match in enumerate(matches):
+            profileIdHome, profileIdAway, scoreHome, scoreAway, teamIdHome, teamIdAway, playedOn = match
+            
+            opponentId = profileIdHome if id != profileIdHome else profileIdAway
+            opponentProfiles = yield self.factory.profileData.get(opponentId)
+            opponentName = "Profile not found" if not opponentProfiles else opponentProfiles[0].name
+
+            data += struct.pack('!B', index)
+            data += util.padWithZeros(playedOn.strftime('%Y/%m/%d %H:%M:%S'), 19)
+            data += util.padWithZeros(opponentName, 16)
+            data += struct.pack('!i', opponentId)
+            data += struct.pack('!B', scoreHome)
+            data += struct.pack('!B', scoreAway)
+            data += struct.pack('!H', teamIdHome)
+            data += struct.pack('!H', teamIdAway)
+
+
+        self.sendData(0x3072, data)
+        defer.returnValue(None)
 
     @defer.inlineCallbacks
     def askForSettings_308a(self, pkt):
