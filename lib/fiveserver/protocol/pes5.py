@@ -366,7 +366,7 @@ class LoginService(PacketDispatcher):
             
             opponentId = profileIdHome if id != profileIdHome else profileIdAway
             opponentProfiles = yield self.factory.profileData.get(opponentId)
-            opponentName = "Profile not found" if not opponentProfiles else opponentProfiles[0].name
+            opponentName = 'Profile not found' if not opponentProfiles else opponentProfiles[0].name
 
             data += struct.pack('!B', index)
             data += util.padWithZeros(playedOn.strftime('%Y/%m/%d %H:%M:%S'), 19)
