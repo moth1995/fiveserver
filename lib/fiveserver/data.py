@@ -414,11 +414,22 @@ class MatchData:
 
     @defer.inlineCallbacks
     def getLast10Matches(self, profileId):
-        sql = ('SELECT profile_id_home, profile_id_away, '
-            'score_home, score_away, team_id_home, team_id_away, played_on '
-            'FROM matches '
-            'WHERE profile_id_home=%s OR profile_id_away=%s '
-            'ORDER BY id DESC LIMIT 10')
+        sql = (
+            'SELECT opponent_profile_id, my_score, opp_score, my_team_id, opp_team_id, played_on '
+            'FROM ('
+            'SELECT id, profile_id_away AS opponent_profile_id, '
+            'score_home AS my_score, score_away AS opp_score, '
+            'team_id_home AS my_team_id, team_id_away AS opp_team_id, '
+            'played_on '
+            'FROM matches WHERE profile_id_home = %s '
+            'UNION ALL '
+            'SELECT id, profile_id_home AS opponent_profile_id, '
+            'score_away AS my_score, score_home AS opp_score, '
+            'team_id_away AS my_team_id, team_id_home AS opp_team_id, '
+            'played_on '
+            'FROM matches WHERE profile_id_away = %s '
+            ') as t ORDER BY t.id DESC LIMIT 10'
+        )
         rows = yield self.dbController.dbRead(0, sql, profileId, profileId)
         defer.returnValue(rows)
 

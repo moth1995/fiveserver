@@ -343,41 +343,26 @@ class LoginService(PacketDispatcher):
             MATCH_RESULT matchResults[10];
         }
         """
-
         id = struct.unpack('!i',pkt.data[0:4])[0]
         index, self._user.profile = self._user.getProfileById(id)
-        
-        if self._user.profile is None:
-            log.msg('ERROR: user profile not found for id: %d' % id)
-            self.sendZeros(0x3072,4)
-            defer.returnValue(None)
-
-        matches = yield self.factory.matchData.getLast10Matches(id)
-
-        if not matches:
-            log.msg('INFO: not matches found for profile id: %d' % id)
-            self.sendZeros(0x3072,4)
-            defer.returnValue(None)
-
-        data = struct.pack('!I', 0)
-
-        for index, match in enumerate(matches):
-            profileIdHome, profileIdAway, scoreHome, scoreAway, teamIdHome, teamIdAway, playedOn = match
-            
-            opponentId = profileIdHome if id != profileIdHome else profileIdAway
-            opponentProfiles = yield self.factory.profileData.get(opponentId)
-            opponentName = 'Profile not found' if not opponentProfiles else opponentProfiles[0].name
-
-            data += struct.pack('!B', index)
-            data += util.padWithZeros(playedOn.strftime('%Y/%m/%d %H:%M:%S'), 19)
-            data += util.padWithZeros(opponentName, 16)
-            data += struct.pack('!i', opponentId)
-            data += struct.pack('!B', scoreHome)
-            data += struct.pack('!B', scoreAway)
-            data += struct.pack('!H', teamIdHome)
-            data += struct.pack('!H', teamIdAway)
-
-
+        data = struct.pack('!i', 0)
+        if self._user.profile is not None:
+            matches = yield self.factory.matchData.getLast10Matches(id)
+            if not matches:
+                #safe check
+                matches = []
+            for match in reversed(matches):
+                opponentId, myScore, oppScore, myTeamId, oppTeamId, playedOn = match
+                opponentProfiles = yield self.factory.profileData.get(opponentId)
+                opponentName = 'Profile not found' if not opponentProfiles else opponentProfiles[0].name
+                data += struct.pack('!B', 0) # unknown value, we're gonna send zero
+                data += util.padWithZeros(playedOn.strftime('%Y/%m/%d %H:%M:%S'), 19)
+                data += util.padWithZeros(opponentName, 16)
+                data += struct.pack('!i', opponentId)
+                data += struct.pack('!B', myScore)
+                data += struct.pack('!B', oppScore)
+                data += struct.pack('!H', myTeamId)
+                data += struct.pack('!H', oppTeamId)
         self.sendData(0x3072, data)
         defer.returnValue(None)
 
