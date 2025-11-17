@@ -321,8 +321,50 @@ class LoginService(PacketDispatcher):
     def do_3050(self, pkt):
         self.sendZeros(0x3052,0x47)
 
+    @defer.inlineCallbacks
     def getMatchResults_3070(self, pkt):
-        self.sendZeros(0x3072,4)
+        """
+        Handler for the message packet 0x3070 so the player can check their last 10 matches results
+        structs generated from this function 0083df90 on pes5.exe
+        
+        typedef struct{
+            byte idx;
+            char date[19];
+            char opponentName[16];
+            int opponentId;
+            byte homeScore;
+            byte awayScore;
+            ushort homeTeamId;
+            ushort awayTeamId;
+        } MATCH_RESULT;
+
+        typedef struct {
+            byte zero;
+            MATCH_RESULT matchResults[10];
+        }
+        """
+        id = struct.unpack('!i',pkt.data[0:4])[0]
+        index, self._user.profile = self._user.getProfileById(id)
+        data = struct.pack('!i', 0)
+        if self._user.profile is not None:
+            matches = yield self.factory.matchData.getLast10Matches(id)
+            if not matches:
+                #safe check
+                matches = []
+            for match in reversed(matches):
+                opponentId, myScore, oppScore, myTeamId, oppTeamId, playedOn = match
+                opponentProfiles = yield self.factory.profileData.get(opponentId)
+                opponentName = 'Profile not found' if not opponentProfiles else opponentProfiles[0].name
+                data += struct.pack('!B', 0) # unknown value, we're gonna send zero
+                data += util.padWithZeros(playedOn.strftime('%Y/%m/%d %H:%M:%S'), 19)
+                data += util.padWithZeros(opponentName, 16)
+                data += struct.pack('!i', opponentId)
+                data += struct.pack('!B', myScore)
+                data += struct.pack('!B', oppScore)
+                data += struct.pack('!H', myTeamId)
+                data += struct.pack('!H', oppTeamId)
+        self.sendData(0x3072, data)
+        defer.returnValue(None)
 
     @defer.inlineCallbacks
     def askForSettings_308a(self, pkt):
