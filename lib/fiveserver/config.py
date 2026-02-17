@@ -4,7 +4,7 @@ Configuration classes for packet server
 
 
 from twisted.internet import reactor, defer
-from twisted.web import client
+from twisted.web import client, error, http
 from xml.dom import minidom
 from datetime import datetime, timedelta
 import time
@@ -12,11 +12,13 @@ import random
 import struct
 import socket
 
+from twisted.internet.threads import deferToThread
+import urllib.request
+
 from fiveserver.model import lobby, user
 from fiveserver import storagecontroller, errors, rating, log
 import yaml
 import os
-
 
 class YamlConfig:
     def __init__(self, yamlFile, newYamlFile=None):
@@ -371,10 +373,12 @@ class FiveServerConfig:
         except AttributeError:
             self.serverConfig.ServerIP = None
         if self.serverConfig.ServerIP in [None,'auto']:
-            # try to determine the WAN address
-            d = client.getPage(self.ipDetectUri.encode('utf-8'), timeout=10)
+            def fetch_ip(url):
+                with urllib.request.urlopen(url, timeout=10) as response:
+                    return response.read().decode('utf-8')
+            
+            d = deferToThread(fetch_ip, self.ipDetectUri)
         else:
-            # explicitly set in configuration file
             d = defer.succeed(self.serverConfig.ServerIP)
         d.addCallback(_setIP)
         d.addErrback(_error, retryDelay)
