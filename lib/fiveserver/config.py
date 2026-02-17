@@ -353,7 +353,10 @@ class FiveServerConfig:
 
     def setIP(self, retryDelay=1, resetTime=True):
         def _setIP(result):
-            self.serverIP_wan = result.decode('utf-8').strip()
+            if isinstance(result, bytes):
+                self.serverIP_wan = result.decode('utf-8').strip()
+            else:
+                self.serverIP_wan = result.strip()
             if resetTime:
                 self.startDatetime = datetime.now()
             log.msg('Server IP-address: %s' % self.serverIP_wan)
