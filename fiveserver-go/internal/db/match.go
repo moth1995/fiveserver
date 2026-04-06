@@ -155,6 +155,35 @@ func GetStreakByProfileID(ctx context.Context, sc *StorageController, profileID 
 	return wins, best, nil
 }
 
+// GetStatsByProfileID returns aggregated match statistics for a profile.
+// Mirrors Python ProfileLogic.getStats which queries wins/losses/draws/goals/streaks.
+func GetStatsByProfileID(ctx context.Context, sc *StorageController, profileID int) (*model.Stats, error) {
+	q := `
+SELECT
+  SUM(CASE WHEN (profile_id_home=? AND score_home>score_away) OR (profile_id_away=? AND score_home<score_away) THEN 1 ELSE 0 END),
+  SUM(CASE WHEN (profile_id_home=? AND score_home<score_away) OR (profile_id_away=? AND score_home>score_away) THEN 1 ELSE 0 END),
+  SUM(CASE WHEN (profile_id_home=? OR profile_id_away=?) AND score_home=score_away THEN 1 ELSE 0 END),
+  SUM(CASE WHEN profile_id_home=? THEN score_home WHEN profile_id_away=? THEN score_away ELSE 0 END),
+  SUM(CASE WHEN profile_id_home=? THEN score_away WHEN profile_id_away=? THEN score_home ELSE 0 END)
+FROM matches
+WHERE profile_id_home=? OR profile_id_away=?`
+
+	id := profileID
+	row := sc.Read.DB().QueryRowContext(ctx, q, id, id, id, id, id, id, id, id, id, id, id, id)
+	s := &model.Stats{ProfileID: profileID}
+	if err := row.Scan(&s.Wins, &s.Losses, &s.Draws, &s.GoalsScored, &s.GoalsAllowed); err != nil {
+		return nil, fmt.Errorf("db/match: stats: %w", err)
+	}
+
+	// Streak is stored in a separate table
+	wins, best, err := GetStreakByProfileID(ctx, sc, profileID)
+	if err == nil {
+		s.StreakCurrent = wins
+		s.StreakBest = best
+	}
+	return s, nil
+}
+
 // UpdateStreak explicitly sets the streak for a profile (used by admin / correction flows).
 func UpdateStreak(ctx context.Context, sc *StorageController, profileID, wins, best int) error {
 	q := `INSERT INTO streaks (profile_id, wins, best) VALUES (?, ?, ?)

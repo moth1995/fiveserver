@@ -31,4 +31,5 @@ type ConnectedUser struct {
 	Conn        interface{} // *server.Conn
 	Info        *UserInfo
 	NeedsLobbyChatReplay bool
+	State                *NetworkState // nil until selectLobby (0x4202)
 }
