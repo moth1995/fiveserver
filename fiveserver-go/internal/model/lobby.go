@@ -220,6 +220,51 @@ func NewRoom(lobby *Lobby) *Room {
 	}
 }
 
+// Enter adds a user to the room. The first user becomes Owner.
+// Mirrors Python Room.enter().
+func (r *Room) Enter(u *ConnectedUser) {
+	r.Players = append(r.Players, u)
+	if r.Owner == nil {
+		r.Owner = u
+	}
+	if u.State != nil {
+		u.State.InRoom = true
+		u.State.Room = r
+	}
+}
+
+// Exit removes a user from the room and clears their state.
+// Mirrors Python Room.exit().
+func (r *Room) Exit(u *ConnectedUser) {
+	players := r.Players[:0]
+	for _, p := range r.Players {
+		if p != u {
+			players = append(players, p)
+		}
+	}
+	r.Players = players
+	// Reassign owner if they left
+	if r.Owner == u {
+		if len(r.Players) > 0 {
+			r.Owner = r.Players[0]
+		} else {
+			r.Owner = nil
+		}
+	}
+	if u.State != nil {
+		u.State.InRoom = false
+		u.State.Room = nil
+	}
+}
+
+// GetByName looks up a room in a lobby by name (used for duplicate check).
+func (l *Lobby) GetRoomByName(name string) (*Room, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	r, ok := l.rooms[name]
+	return r, ok
+}
+
 func (r *Room) IsOwner(u *ConnectedUser) bool {
 	if r.Owner == nil || u.Profile == nil {
 		return false
