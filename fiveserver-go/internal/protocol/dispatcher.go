@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"sync"
+	"time"
 
 	"github.com/fiveserver/fiveserver-go/internal/config"
 	"github.com/fiveserver/fiveserver-go/internal/model"
@@ -67,19 +68,29 @@ type Session struct {
 
 // ---- Hub --------------------------------------------------------------------
 
+// MatchState tracks the two sessions in an active match.
+// Keyed in Hub by the "home" session pointer.
+type MatchState struct {
+	Home    *Session
+	Away    *Session
+	Started time.Time
+}
+
 // Hub holds server-wide shared state: online sessions, configuration, and lobbies.
 // All exported methods are thread-safe.
 type Hub struct {
 	mu      sync.RWMutex
-	users   map[string]*Session // key: profile name (set after profile select)
+	users   map[string]*Session   // key: profile name (set after profile select)
+	matches map[*Session]*MatchState // key: home session
 	cfg     *config.Config
 	lobbies []*model.Lobby // live lobby instances initialised from cfg.Lobbies
 }
 
 func NewHub(cfg *config.Config) *Hub {
 	h := &Hub{
-		users: make(map[string]*Session),
-		cfg:   cfg,
+		users:   make(map[string]*Session),
+		matches: make(map[*Session]*MatchState),
+		cfg:     cfg,
 	}
 	for i, lc := range cfg.Lobbies {
 		l := model.NewLobby(lc.Name, cfg.MaxUsers)
@@ -102,6 +113,46 @@ func (h *Hub) GetLobby(index int) (*model.Lobby, bool) {
 		return nil, false
 	}
 	return h.lobbies[index], true
+}
+
+// PendingMatch returns the active MatchState for a session (either as home or away).
+func (h *Hub) PendingMatch(s *Session) (*MatchState, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if ms, ok := h.matches[s]; ok {
+		return ms, true
+	}
+	// Also check if this session is the away side
+	for _, ms := range h.matches {
+		if ms.Away == s {
+			return ms, true
+		}
+	}
+	return nil, false
+}
+
+// SetPendingMatch registers a MatchState keyed by the home session.
+func (h *Hub) SetPendingMatch(ms *MatchState) {
+	h.mu.Lock()
+	h.matches[ms.Home] = ms
+	h.mu.Unlock()
+}
+
+// ClearPendingMatch removes the active match for the given session.
+func (h *Hub) ClearPendingMatch(s *Session) {
+	h.mu.Lock()
+	// Remove whether s is home or away
+	if _, ok := h.matches[s]; ok {
+		delete(h.matches, s)
+	} else {
+		for k, ms := range h.matches {
+			if ms.Away == s {
+				delete(h.matches, k)
+				break
+			}
+		}
+	}
+	h.mu.Unlock()
 }
 
 // Config returns the server configuration (read-only after startup).
