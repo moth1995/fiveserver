@@ -23,6 +23,20 @@ type ProfileSettings struct {
 	Settings2 []byte
 }
 
+// NetworkState holds per-connection game-lobby state set during selectLobby (0x4202).
+// Mirrors Python UserState fields.
+type NetworkState struct {
+	IP1         []byte // 16 bytes, internal IP (from pkt.Data[1:17])
+	IP2         []byte // 16 bytes, external IP (from pkt.Data[19:35])
+	UDPPort1    uint16
+	UDPPort2    uint16
+	SomeField   uint16
+	InRoom      bool
+	NoLobbyChat int
+	Room        *Room // nil when not in a room
+	TeamID      int
+}
+
 // Stats holds aggregated match statistics for a profile.
 // Mirrors Python Stats in model/user.py.
 type Stats struct {

@@ -67,19 +67,41 @@ type Session struct {
 
 // ---- Hub --------------------------------------------------------------------
 
-// Hub holds server-wide shared state: online sessions and configuration.
+// Hub holds server-wide shared state: online sessions, configuration, and lobbies.
 // All exported methods are thread-safe.
 type Hub struct {
-	mu    sync.RWMutex
-	users map[string]*Session // key: profile name (set after profile select)
-	cfg   *config.Config
+	mu      sync.RWMutex
+	users   map[string]*Session // key: profile name (set after profile select)
+	cfg     *config.Config
+	lobbies []*model.Lobby // live lobby instances initialised from cfg.Lobbies
 }
 
 func NewHub(cfg *config.Config) *Hub {
-	return &Hub{
+	h := &Hub{
 		users: make(map[string]*Session),
 		cfg:   cfg,
 	}
+	for i, lc := range cfg.Lobbies {
+		l := model.NewLobby(lc.Name, cfg.MaxUsers)
+		l.Index = i
+		l.TypeCode = lc.TypeCode
+		l.TypeStr = lc.Type
+		l.ShowMatches = lc.ShowMatches
+		l.CheckRosterHash = lc.CheckRosterHash
+		h.lobbies = append(h.lobbies, l)
+	}
+	return h
+}
+
+// Lobbies returns the live lobby slice (read-only after startup).
+func (h *Hub) Lobbies() []*model.Lobby { return h.lobbies }
+
+// GetLobby returns the lobby at the given index, or false if out of range.
+func (h *Hub) GetLobby(index int) (*model.Lobby, bool) {
+	if index < 0 || index >= len(h.lobbies) {
+		return nil, false
+	}
+	return h.lobbies[index], true
 }
 
 // Config returns the server configuration (read-only after startup).
