@@ -20,6 +20,19 @@ func validDSN(host string) string {
 	return "fiveserver:we9le@tcp(" + host + ":3306)/fiveserver?charset=utf8mb4&parseTime=true"
 }
 
+// testDBConfig returns a DBConfig pointing at a non-reachable host for unit tests.
+func testDBConfig() config.DBConfig {
+	return config.DBConfig{
+		Name:           "fiveserver",
+		User:           "fiveserver",
+		Password:       "we9le",
+		ReadServers:    []string{"127.0.0.1"},
+		WriteServers:   []string{"127.0.0.1"},
+		SharePool:      true,
+		ConnectionPool: testPoolCfg,
+	}
+}
+
 func TestNewPool_SingleServer(t *testing.T) {
 	p, err := db.NewPool([]string{validDSN("127.0.0.1")}, testPoolCfg)
 	if err != nil {
