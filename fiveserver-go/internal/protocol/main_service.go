@@ -381,14 +381,9 @@ func handleChallenge4320(hub *Hub, sc *db.StorageController) HandlerFunc {
 		copy(challengeData, profInfo)
 		challengeData = append(challengeData, ping[0], 0, 0)
 
-		// Store challenger reference on owner's User for challengeResponse
-		room.Owner.Conn = room.Owner.Conn // preserve; challenger stored in Session
-		if ownerSess, ok := hub.GetSession(room.Owner.Profile.Name); ok {
-			ownerSess.User.Conn = s.User.Conn // TODO: verify — Python stores self._user on owner
-			_ = ownerSess
-		}
-		// Store challenger pointer in room for lookup during challengeResponse
-		room.MatchStarter = s.User // temporarily repurpose MatchStarter as challenger ref
+		// Store challenger in room.MatchStarter so challengeResponse_4323 can find it.
+		// Python: usr.challenger = self._user (stored on the owner's protocol instance).
+		room.MatchStarter = s.User
 
 		sendToUser(hub, room.Owner, 0x4322, challengeData)
 		return nil // no response to challenger until owner responds
