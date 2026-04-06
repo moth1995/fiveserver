@@ -11,6 +11,7 @@ import (
 )
 
 // HandlerFunc is called for every non-heartbeat packet received on a Conn.
+// Kept for compatibility; prefer Serve(addr, dispatcher, onClose) for new code.
 type HandlerFunc func(conn *Conn, pkt protocol.Packet)
 
 // Conn wraps a net.Conn, tracks the rolling packet counter, and provides
@@ -48,40 +49,63 @@ func (c *Conn) SendData(id uint16, data []byte) error {
 	})
 }
 
-// SendZeros sends a packet with length zero bytes of data.
+// SendZeros sends a packet with id and length zero bytes of data.
 func (c *Conn) SendZeros(id uint16, length int) error {
 	return c.SendData(id, make([]byte, length))
 }
 
-// Serve listens on addr and spawns a goroutine for each accepted connection.
-// handler is called for every non-heartbeat packet. Blocks until the listener
-// is closed.
-func Serve(addr string, handler HandlerFunc) error {
+// Serve listens on addr and dispatches packets to the given Dispatcher.
+// A ConnSender shim is built per connection so the protocol layer never
+// imports the server package (avoids import cycle).
+//
+// Serve blocks until the listener is closed. Pass a channel that is closed
+// on shutdown via the stopCh parameter; pass nil to run forever.
+func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("server: listen %s: %w", addr, err)
 	}
-	defer ln.Close()
+
+	// Close the listener when stopCh is closed (graceful shutdown).
+	if stopCh != nil {
+		go func() {
+			<-stopCh
+			ln.Close()
+		}()
+	}
+
 	for {
 		raw, err := ln.Accept()
 		if err != nil {
 			// net.ErrClosed is returned when ln.Close() is called
-			return fmt.Errorf("server: accept: %w", err)
+			return nil
 		}
 		conn := &Conn{
 			Conn:        raw,
 			RemoteAddr:  raw.RemoteAddr().String(),
 			packetCount: 1,
 		}
-		go readLoop(conn, handler)
+		go serveConn(conn, d)
 	}
 }
 
-// readLoop reads XOR-encrypted packets from conn until the connection closes.
-// It handles heartbeat packets (0x0005) internally and calls handler for all
-// others. Mirrors Python PacketReceiver.dataReceived() framing logic exactly.
-func readLoop(conn *Conn, handler HandlerFunc) {
+// serveConn builds a Session+ConnSender for one accepted connection and runs
+// the packet read loop, dispatching every packet through d.
+func serveConn(conn *Conn, d *protocol.Dispatcher) {
 	defer conn.Close()
+
+	// ConnSender shim: bridges server.Conn to protocol.Session without an
+	// import cycle (protocol cannot import server).
+	cs := &protocol.ConnSender{
+		SendDataFn:  conn.SendData,
+		SendZerosFn: conn.SendZeros,
+		SendFn:      conn.Send,
+		RemoteAddr:  conn.RemoteAddr,
+	}
+	s := &protocol.Session{
+		Conn:       cs,
+		Dispatcher: d,
+	}
 
 	buf := make([]byte, 0, 4096)
 	tmp := make([]byte, 4096)
@@ -94,30 +118,24 @@ func readLoop(conn *Conn, handler HandlerFunc) {
 		buf = append(buf, tmp[:n]...)
 
 		for {
-			// Need at least 8 bytes to read the header
 			if len(buf) < 8 {
 				break
 			}
 
-			// Step 1: XOR-decrypt the first 8 bytes (start=0) to get the header
+			// XOR-decrypt the 8-byte header at offset 0
 			hdrBytes := crypto.XorData(buf[:8], 0)
 			hdr, err := protocol.UnmarshalHeader(hdrBytes)
 			if err != nil {
 				return
 			}
 
-			// Step 2: wait until the full packet is buffered
 			total := int(hdr.Length) + 24
 			if len(buf) < total {
 				break
 			}
 
-			// Step 3: XOR-decrypt the full packet (header already known, re-decrypt
-			// starting at offset 8 for the MD5+data portion) — matches Python:
-			// packet.makePacket(stream.xorData(recvd[:hdr.length+24], 8))
+			// XOR-decrypt the remainder at offset 8, then prepend decrypted header
 			pktBytes := crypto.XorData(buf[:total], 8)
-			// Prepend the already-decrypted header bytes so Unmarshal sees a
-			// complete, consistent buffer.
 			full := make([]byte, total)
 			copy(full[:8], hdrBytes)
 			copy(full[8:], pktBytes[8:])
@@ -126,18 +144,17 @@ func readLoop(conn *Conn, handler HandlerFunc) {
 
 			pkt, err := protocol.Unmarshal(full)
 			if err != nil {
-				// Bad packet — drop connection
 				return
 			}
 
-			// Heartbeat: echo it back, increment counter (matches Python _packetReceived)
+			// Heartbeat: echo back, no dispatch
 			if pkt.Header.ID == 0x0005 {
 				pkt.Header.PacketCount = atomic.LoadUint32(&conn.packetCount)
 				_ = conn.Send(pkt)
 				continue
 			}
 
-			handler(conn, pkt)
+			_ = d.Dispatch(s, pkt)
 		}
 	}
 }
