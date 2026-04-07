@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -64,7 +65,8 @@ func (c *Conn) SendZeros(id uint16, length int) error {
 //
 // Serve blocks until the listener is closed. Pass a channel that is closed
 // on shutdown via the stopCh parameter; pass nil to run forever.
-func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}) error {
+// When debug is true each packet's hex dump is logged (matches Python Debug flag).
+func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bool) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("server: listen %s: %w", addr, err)
@@ -90,13 +92,13 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}) error {
 			packetCount: 1,
 		}
 		log.Printf("[tcp] connection accepted from %s", conn.RemoteAddr)
-		go serveConn(conn, d)
+		go serveConn(conn, d, debug)
 	}
 }
 
 // serveConn builds a Session+ConnSender for one accepted connection and runs
 // the packet read loop, dispatching every packet through d.
-func serveConn(conn *Conn, d *protocol.Dispatcher) {
+func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool) {
 	defer func() {
 		log.Printf("[tcp] connection closed: %s", conn.RemoteAddr)
 		conn.Close()
@@ -113,6 +115,18 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 	s := &protocol.Session{
 		Conn:       cs,
 		Dispatcher: d,
+	}
+
+	// In debug mode, wrap SendDataFn to also log the hex dump.
+	// Captures s so the username is available after authentication.
+	if debug {
+		origSend := cs.SendDataFn
+		cs.SendDataFn = func(id uint16, data []byte) error {
+			username := sessionUsername(s)
+			count := atomic.LoadUint32(&conn.packetCount)
+			log.Printf("[SEND {%s}]: %s", username, formatPacket(id, uint16(len(data)), count, data))
+			return origSend(id, data)
+		}
 	}
 
 	buf := make([]byte, 0, 4096)
@@ -165,6 +179,10 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 			}
 
 			log.Printf("[tcp] %s: recv pkt 0x%04x len=%d", conn.RemoteAddr, pkt.Header.ID, pkt.Header.Length)
+			if debug {
+				username := sessionUsername(s)
+				log.Printf("[RECV {%s}]: %s", username, formatPacket(pkt.Header.ID, pkt.Header.Length, pkt.Header.PacketCount, pkt.Data))
+			}
 
 			// Heartbeat: echo back, no dispatch
 			if pkt.Header.ID == 0x0005 {
@@ -178,4 +196,51 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 			}
 		}
 	}
+}
+
+// sessionUsername returns the profile name of the authenticated user on s,
+// or empty string if not yet authenticated — matching Python's try/except.
+func sessionUsername(s *protocol.Session) string {
+	if s.User != nil && s.User.Profile != nil {
+		return s.User.Profile.Name
+	}
+	return ""
+}
+
+// formatPacket formats a packet as Python's PacketFormatter.format() does:
+//
+//	Packet: id=0x%04x, length=0x%x, count=%d
+//	xx xx xx xx xx xx xx xx  ........
+func formatPacket(id, length uint16, count uint32, data []byte) string {
+	header := fmt.Sprintf("Packet: id=0x%04x, length=0x%x, count=%d", id, length, count)
+	if len(data) == 0 {
+		return header
+	}
+	var sb strings.Builder
+	sb.WriteString(header)
+	const cols = 8
+	for i := 0; i < len(data); i += cols {
+		end := i + cols
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := data[i:end]
+		sb.WriteByte('\n')
+		hexParts := make([]string, len(chunk))
+		for j, b := range chunk {
+			hexParts[j] = fmt.Sprintf("%02x", b)
+		}
+		sb.WriteString(strings.Join(hexParts, " "))
+		// pad to align ASCII column
+		sb.WriteString(strings.Repeat("   ", cols-len(chunk)))
+		sb.WriteString("  ")
+		for _, b := range chunk {
+			if b >= 32 && b < 127 {
+				sb.WriteByte(b)
+			} else {
+				sb.WriteByte('.')
+			}
+		}
+	}
+	return sb.String()
 }
