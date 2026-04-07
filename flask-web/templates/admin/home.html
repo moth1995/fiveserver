@@ -1,3 +1,48 @@
 {% extends "admin/layout.html" %}
-{% block title %}Home{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}Dashboard{% endblock %}
+{% block body %}
+<div class="cards">
+  <div class="card">
+    <div class="card-value">{{ user_count }}</div>
+    <div class="card-label">Registered Users</div>
+  </div>
+  <div class="card">
+    <div class="card-value">{{ online_users | length }}</div>
+    <div class="card-label">Online Now</div>
+  </div>
+  <div class="card">
+    <div class="card-value">{{ lobbies | length }}</div>
+    <div class="card-label">Lobbies</div>
+  </div>
+</div>
+
+<h2>Online Players</h2>
+{% if online_users %}
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Username</th><th>Lobby</th><th>Connected Since</th></tr></thead>
+  <tbody>
+  {% for u in online_users %}
+  <tr><td>{{ u.username }}</td><td>{{ u.lobby }}</td><td>{{ u.since }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p style="color:#64748b;">No players currently online.</p>
+{% endif %}
+
+{% if lobbies %}
+<h2 style="margin-top:28px;">Lobbies</h2>
+<div class="table-wrap">
+<table>
+  <thead><tr><th>Name</th></tr></thead>
+  <tbody>
+  {% for lobby in lobbies %}
+  <tr><td>{% if lobby is mapping %}{{ lobby.name }}{% else %}{{ lobby }}{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+{% endblock %}

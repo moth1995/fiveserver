@@ -1,3 +1,31 @@
 {% extends "admin/layout.html" %}
-{% block title %}Profile_detail{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}Profile: {{ profile.name or "(empty)" }}{% endblock %}
+{% block body %}
+
+<div class="cards">
+  <div class="card"><div class="card-value">{{ profile.rank }}</div><div class="card-label">Rank</div></div>
+  <div class="card"><div class="card-value">{{ profile.points }}</div><div class="card-label">Points</div></div>
+  <div class="card"><div class="card-value">{{ stats.wins }}</div><div class="card-label">Wins</div></div>
+  <div class="card"><div class="card-value">{{ stats.losses }}</div><div class="card-label">Losses</div></div>
+  <div class="card"><div class="card-value">{{ stats.draws }}</div><div class="card-label">Draws</div></div>
+  <div class="card"><div class="card-value">{{ stats.win_pct }}%</div><div class="card-label">Win %</div></div>
+  <div class="card"><div class="card-value">{{ stats.goals_for }}</div><div class="card-label">Goals For</div></div>
+  <div class="card"><div class="card-value">{{ stats.goals_against }}</div><div class="card-label">Goals Against</div></div>
+  <div class="card"><div class="card-value">{{ stats.streak }}</div><div class="card-label">Win Streak</div></div>
+  <div class="card"><div class="card-value">{{ stats.best_streak }}</div><div class="card-label">Best Streak</div></div>
+  <div class="card">
+    <div class="card-value">{{ (profile.seconds_played // 3600) }}h</div>
+    <div class="card-label">Play Time</div>
+  </div>
+  <div class="card"><div class="card-value">{{ profile.disconnects }}</div><div class="card-label">Disconnects</div></div>
+</div>
+
+<div class="info-box">
+  <p><strong>Profile ID:</strong> {{ profile.id }}</p>
+  <p><strong>User ID:</strong> <a href="/admin/users/{{ profile.user_id }}">{{ profile.user_id }}</a></p>
+  <p><strong>Fav Team ID:</strong> {{ profile.fav_team or '—' }}</p>
+  <p><strong>Fav Player ID:</strong> {{ profile.fav_player or '—' }}</p>
+  <p><strong>Last Updated:</strong> {{ profile.updated_on or '—' }}</p>
+</div>
+
+{% endblock %}

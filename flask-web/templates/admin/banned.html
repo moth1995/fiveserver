@@ -1,3 +1,42 @@
 {% extends "admin/layout.html" %}
-{% block title %}Banned{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}Ban List{% endblock %}
+{% block body %}
+
+{% if banned %}
+<div class="table-wrap">
+<table>
+  <thead><tr>
+    <th>Entry</th><th>Actions</th>
+  </tr></thead>
+  <tbody>
+  {% for entry in banned %}
+  <tr>
+    <td style="font-family:monospace;">{{ entry }}</td>
+    <td>
+      <form method="POST" action="/admin/ban-remove" style="display:inline">
+        <input type="hidden" name="entry" value="{{ entry }}">
+        <button class="btn btn-danger btn-sm" type="submit"
+                onclick="return confirm('Remove ban for {{ entry }}?')">Remove</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="2" style="color:#64748b;">No banned entries.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% else %}
+<p style="color:#64748b;">No banned entries.</p>
+{% endif %}
+
+<h2 style="margin-top:28px;">Add Ban</h2>
+<form class="settings-form" method="POST" action="/admin/ban-add">
+  <div class="form-row">
+    <label for="entry">IP or CIDR</label>
+    <input type="text" id="entry" name="entry" placeholder="e.g. 1.2.3.4 or 1.2.3.0/24" style="width:260px;">
+    <button class="btn btn-primary" type="submit">Ban</button>
+  </div>
+</form>
+
+{% endblock %}

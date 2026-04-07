@@ -1,3 +1,49 @@
 {% extends "admin/layout.html" %}
-{% block title %}User_detail{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}User: {{ user.username }}{% endblock %}
+{% block body %}
+<div class="info-box" style="margin-bottom:24px;">
+  <table style="box-shadow:none;background:transparent;">
+    <tr><td style="font-weight:600;width:140px;color:#64748b;">ID</td><td>{{ user.id }}</td></tr>
+    <tr><td style="font-weight:600;color:#64748b;">Username</td><td>{{ user.username }}</td></tr>
+    <tr><td style="font-weight:600;color:#64748b;">Serial</td><td style="font-family:monospace;">{{ user.serial }}</td></tr>
+    <tr><td style="font-weight:600;color:#64748b;">Status</td>
+      <td>{% if user.deleted %}<span class="badge badge-deleted">Deleted</span>
+        {% elif user.reset_nonce %}<span class="badge badge-locked">Locked</span>
+        {% else %}<span class="badge badge-online">Active</span>{% endif %}</td>
+    </tr>
+    <tr><td style="font-weight:600;color:#64748b;">Updated</td><td>{{ user.updated_on or "—" }}</td></tr>
+    {% if user.reset_nonce %}
+    <tr><td style="font-weight:600;color:#64748b;">Recovery URL</td>
+      <td><a href="/modifyUser/{{ user.reset_nonce }}">/modifyUser/{{ user.reset_nonce }}</a></td>
+    </tr>
+    {% endif %}
+  </table>
+  <div style="margin-top:16px;display:flex;gap:8px;">
+    <form method="POST" action="/admin/userlock">
+      <input type="hidden" name="username" value="{{ user.username }}">
+      <button class="btn btn-secondary btn-sm" type="submit">Lock / Generate Recovery Link</button>
+    </form>
+    <form method="POST" action="/admin/userkill">
+      <input type="hidden" name="username" value="{{ user.username }}">
+      <button class="btn btn-danger btn-sm" type="submit">Delete User</button>
+    </form>
+  </div>
+</div>
+<h2>Game Profiles</h2>
+{% if profiles %}
+<div class="table-wrap"><table>
+  <thead><tr><th>#</th><th>Name</th><th>Rank</th><th>Points</th><th>Disconnects</th><th>Play Time</th><th></th></tr></thead>
+  <tbody>
+  {% for p in profiles %}
+  <tr>
+    <td>{{ loop.index }}</td>
+    <td><a href="/admin/profiles/{{ p.id }}">{{ p.name or "(empty)" }}</a></td>
+    <td>{{ p.rank }}</td><td>{{ p.points }}</td><td>{{ p.disconnects }}</td>
+    <td>{{ (p.seconds_played // 3600) }}h {{ ((p.seconds_played % 3600) // 60) }}m</td>
+    <td><a class="btn btn-secondary btn-sm" href="/admin/profiles/{{ p.id }}">Stats</a></td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p style="color:#64748b;">No profiles for this user.</p>{% endif %}
+{% endblock %}

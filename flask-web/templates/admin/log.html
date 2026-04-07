@@ -1,3 +1,23 @@
 {% extends "admin/layout.html" %}
-{% block title %}Log{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}Server Log{% endblock %}
+{% block body %}
+
+<form class="log-controls" method="GET" action="">
+  <label>Show last:</label>
+  <select name="lines" onchange="this.form.submit()">
+    {% for n in [30, 100, 500, 1000, 5000] %}
+    <option value="{{ n }}" {% if n == line_count %}selected{% endif %}>{{ n }} lines</option>
+    {% endfor %}
+  </select>
+</form>
+
+<pre class="log-viewer" id="logViewer">{{ lines | join('\n') | e }}</pre>
+
+<script>
+(function() {
+  var el = document.getElementById('logViewer');
+  if (el) el.scrollTop = el.scrollHeight;
+})();
+</script>
+
+{% endblock %}
