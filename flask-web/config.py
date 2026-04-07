@@ -15,8 +15,9 @@ class AppConfig:
     """
 
     def __init__(self, data: dict[str, Any], yaml_file: str | None = None) -> None:
-        self._cfg: dict[str, Any] = dict(data)
-        self._yaml_file: str | None = yaml_file
+        object.__setattr__(self, '_cfg', dict(data))
+        object.__setattr__(self, '_yaml_file', yaml_file)
+        object.__setattr__(self, '_dirty_keys', set())
         for k, v in self._cfg.items():
             object.__setattr__(self, k, v)
 
@@ -25,6 +26,7 @@ class AppConfig:
         if not name.startswith('_'):
             try:
                 self._cfg[name] = value
+                self._dirty_keys.add(name)
             except AttributeError:
                 pass
 
@@ -38,11 +40,24 @@ class AppConfig:
         return self._cfg.get(key, default)
 
     def save(self) -> None:
-        """Write config back to the source YAML file."""
+        """Write only changed keys back to the source YAML file.
+
+        Reloads the original file first so structure and order are preserved.
+        Admin-only keys (from admin.yaml) are never written to fiveserver.yaml.
+        Uses 4-space indentation to match the project's YAML style.
+        """
         if self._yaml_file is None:
             raise RuntimeError('No YAML file path set — cannot save config')
+        if not self._dirty_keys:
+            return
+        with open(self._yaml_file, encoding='utf-8') as f:
+            original: dict[str, Any] = yaml.safe_load(f) or {}
+        for key in self._dirty_keys:
+            if key in original:
+                original[key] = self._cfg[key]
         with open(self._yaml_file, 'wt', encoding='utf-8') as f:
-            f.write(yaml.dump(self._cfg))
+            yaml.dump(original, f, indent=4, default_flow_style=False,
+                      sort_keys=False, allow_unicode=True)
 
 
 def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:
