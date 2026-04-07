@@ -55,8 +55,17 @@
     {% for lb in lobbies %}
     <tr>
       <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:140px;"></td>
-      <td><input type="text" name="lobby_type_{{ loop.index0 }}" value="{{ lb.type }}"
-                 style="width:100px;" placeholder="e.g. A or noStats"></td>
+      <td>
+        <select name="lobby_type_{{ loop.index0 }}">
+          <option value="open"   {% if lb.type == 'open'   %}selected{% endif %}>Open</option>
+          <option value="noStats"{% if lb.type == 'noStats'%}selected{% endif %}>No Stats</option>
+          <option value="1"      {% if lb.type == '1'      %}selected{% endif %}>Div 1</option>
+          <option value="2"      {% if lb.type == '2'      %}selected{% endif %}>Div 2</option>
+          <option value="3A"     {% if lb.type == '3A'     %}selected{% endif %}>3A</option>
+          <option value="3B"     {% if lb.type == '3B'     %}selected{% endif %}>3B</option>
+          <option value="A"      {% if lb.type == 'A'      %}selected{% endif %}>Amateur</option>
+        </select>
+      </td>
       <td style="text-align:center;">
         <input type="checkbox" name="lobby_show_{{ loop.index0 }}" value="1"
                {% if lb.show_matches %}checked{% endif %}>
