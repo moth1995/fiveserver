@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -78,6 +79,7 @@ type StorageController struct {
 
 // NewStorageController builds DSNs from cfg and opens the pools.
 func NewStorageController(cfg config.DBConfig) (*StorageController, error) {
+	log.Printf("db: connecting as user=%q password=%q db=%q", cfg.User, cfg.Password, cfg.Name)
 	buildDSNs := func(hosts []string) []string {
 		dsns := make([]string, len(hosts))
 		for i, h := range hosts {
