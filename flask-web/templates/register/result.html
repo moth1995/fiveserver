@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Result — Fiveserver{% endblock %}
+{% block title %}{{ "Success" if success else "Error" }} — Fiveserver{% endblock %}
 {% block content %}
-<!-- Implemented in step-05 -->
+<p>{{ message }}</p>
 {% endblock %}

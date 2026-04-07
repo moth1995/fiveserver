@@ -1,6 +1,102 @@
+"""Registration blueprint: user sign-up and password-recovery flow."""
 from __future__ import annotations
 
-from flask import Blueprint
+import random
+import string
+from typing import Any
 
-# Registration blueprint — implemented in step-04
+from flask import (
+    Blueprint,
+    abort,
+    current_app,
+    render_template,
+    request,
+    send_from_directory,
+)
+
+from crypto import blowfish_encrypt
+from config import is_banned
+from db import (
+    get_db,
+    find_user_by_username,
+    find_user_by_nonce,
+    create_user,
+    update_user,
+    create_profiles_for_user,
+)
+
 register_bp = Blueprint('register', __name__)
+
+
+@register_bp.route('/')
+def form() -> str:
+    return render_template('register/form.html', serial='', username='', nonce='')
+
+
+@register_bp.route('/md5.js')
+def md5_js():  # type: ignore[return]
+    return send_from_directory(current_app.static_folder, 'md5.js')
+
+
+@register_bp.route('/modifyUser/<nonce>')
+def modify_user(nonce: str) -> str:
+    conn = get_db()
+    user: dict[str, Any] | None = find_user_by_nonce(conn, nonce)
+    if user is None:
+        abort(404)
+    return render_template(
+        'register/form.html',
+        serial=user['serial'],
+        username=user['username'],
+        nonce=nonce,
+    )
+
+
+@register_bp.route('/register', methods=['POST'])
+def register():  # type: ignore[return]
+    remote_ip: str = request.remote_addr or '0.0.0.0'
+    banned_list = current_app.config.get('BANNED_LIST', [])
+    if is_banned(remote_ip, banned_list):
+        abort(403)
+
+    serial: str = request.form.get('serial', '')
+    username: str = request.form.get('user', '')
+    hex_hash: str = request.form.get('hash', '')
+    nonce: str = request.form.get('nonce', '')
+
+    # Encrypt the client-supplied MD5 hash before storing
+    encrypted_hash: str = blowfish_encrypt(hex_hash)
+
+    conn = get_db()
+
+    if not nonce:
+        # New registration
+        existing = find_user_by_username(conn, username)
+        if existing is not None:
+            return render_template(
+                'register/result.html',
+                message='ERROR: username is already taken',
+                success=False,
+            ), 409
+        new_id: int = create_user(conn, username, serial, encrypted_hash)
+        create_profiles_for_user(conn, new_id)
+        return render_template(
+            'register/result.html',
+            message='Registration complete',
+            success=True,
+        )
+    else:
+        # Password / serial modification via nonce
+        user: dict[str, Any] | None = find_user_by_nonce(conn, nonce)
+        if user is None:
+            return render_template(
+                'register/result.html',
+                message='ERROR: invalid or expired recovery link',
+                success=False,
+            ), 404
+        update_user(conn, user['id'], username, serial, encrypted_hash)
+        return render_template(
+            'register/result.html',
+            message='Account updated successfully',
+            success=True,
+        )
