@@ -53,8 +53,7 @@ class AppConfig:
         with open(self._yaml_file, encoding='utf-8') as f:
             original: dict[str, Any] = yaml.safe_load(f) or {}
         for key in self._dirty_keys:
-            if key in original:
-                original[key] = self._cfg[key]
+            original[key] = self._cfg[key]
         with open(self._yaml_file, 'wt', encoding='utf-8') as f:
             yaml.dump(original, f, indent=4, default_flow_style=False,
                       sort_keys=False, allow_unicode=True)
