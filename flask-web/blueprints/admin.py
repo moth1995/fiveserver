@@ -372,53 +372,83 @@ def userunlock() -> str | tuple[str, int]:
 # ---------------------------------------------------------------------------
 
 
+# Division types stored as single-element lists in YAML: ['1'], ['2'], etc.
+# 'open' and 'noStats' are plain strings. 'open' is the default (no type key needed).
+_DIV_TYPES: set[str] = {'A', '3B', '3A', '2', '1'}
+
+
+def _yaml_type_to_ui(type_val: Any) -> str:
+    """Convert a YAML lobby type value to a single select option string."""
+    if isinstance(type_val, list):
+        # e.g. ['A'] → 'A', ['1'] → '1'
+        return type_val[0] if type_val else 'open'
+    if isinstance(type_val, str) and type_val:
+        return type_val  # 'noStats' or 'open'
+    return 'open'
+
+
+def _ui_type_to_yaml(ui_type: str) -> Any:
+    """Convert a select option string back to the YAML type value."""
+    if ui_type in _DIV_TYPES:
+        return [ui_type]
+    if ui_type == 'noStats':
+        return 'noStats'
+    return 'open'  # caller will omit this from the dict
+
+
 def _normalize_lobbies(raw: list[Any]) -> list[dict[str, Any]]:
-    """Normalize YAML lobby entries (str or dict) to uniform dicts for the UI."""
+    """Normalize YAML lobby entries (str or dict) to uniform dicts for the UI.
+
+    Defaults match original FiveServerConfig:
+      showMatches      → True when absent
+      checkRosterHash  → True when absent
+    """
     result: list[dict[str, Any]] = []
     for entry in raw:
         if isinstance(entry, str):
             result.append({
                 'name': entry,
-                'type': '',
+                'type': 'open',
                 'show_matches': True,
-                'check_roster_hash': False,
+                'check_roster_hash': True,
             })
         elif isinstance(entry, dict):
-            type_val = entry.get('type', '')
-            if isinstance(type_val, list):
-                type_val = ','.join(type_val)
             result.append({
                 'name': entry.get('name', ''),
-                'type': str(type_val) if type_val else '',
+                'type': _yaml_type_to_ui(entry.get('type', 'open')),
                 'show_matches': bool(entry.get('showMatches', True)),
-                'check_roster_hash': bool(entry.get('checkRosterHash', False)),
+                'check_roster_hash': bool(entry.get('checkRosterHash', True)),
             })
     return result
 
 
 def _lobbies_to_yaml(lobbies: list[dict[str, Any]]) -> list[Any]:
-    """Convert UI lobby dicts back to the mixed str/dict YAML format."""
+    """Convert UI lobby dicts back to the mixed str/dict YAML format.
+
+    A lobby becomes a plain string when type is open, showMatches is True,
+    and checkRosterHash is True — matching the original compact notation.
+    """
     result: list[Any] = []
     for lb in lobbies:
         name = lb['name'].strip()
         if not name:
             continue
-        has_extras = (lb['type'] or not lb['show_matches'] or lb['check_roster_hash'])
-        if not has_extras:
+        ui_type: str = lb.get('type', 'open')
+        show: bool = lb['show_matches']
+        roster: bool = lb['check_roster_hash']
+        # Simple case — plain string, no extras needed
+        if ui_type == 'open' and show and roster:
             result.append(name)
-        else:
-            d: dict[str, Any] = {'name': name}
-            if lb['type']:
-                raw_type = lb['type'].strip()
-                if ',' in raw_type:
-                    d['type'] = [t.strip() for t in raw_type.split(',')]
-                else:
-                    d['type'] = raw_type
-            if not lb['show_matches']:
-                d['showMatches'] = False
-            if lb['check_roster_hash']:
-                d['checkRosterHash'] = True
-            result.append(d)
+            continue
+        d: dict[str, Any] = {'name': name}
+        yaml_type = _ui_type_to_yaml(ui_type)
+        if yaml_type != 'open':
+            d['type'] = yaml_type
+        if not show:
+            d['showMatches'] = False
+        if not roster:
+            d['checkRosterHash'] = False
+        result.append(d)
     return result
 
 
@@ -427,10 +457,9 @@ def _parse_lobbies_from_form(form: Any) -> list[dict[str, Any]]:
     count = int(form.get('lobby_count', 0))
     lobbies: list[dict[str, Any]] = []
     for i in range(count):
-        name = form.get(f'lobby_name_{i}', '').strip()
         lobbies.append({
-            'name': name,
-            'type': form.get(f'lobby_type_{i}', '').strip(),
+            'name': form.get(f'lobby_name_{i}', '').strip(),
+            'type': form.get(f'lobby_type_{i}', 'open'),
             'show_matches': f'lobby_show_{i}' in form,
             'check_roster_hash': f'lobby_roster_{i}' in form,
         })
