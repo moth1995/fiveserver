@@ -19,6 +19,12 @@
     {% endif %}
   </table>
   <div style="margin-top:16px;display:flex;gap:8px;">
+    {% if user.reset_nonce %}
+    <form method="POST" action="/admin/userunlock">
+      <input type="hidden" name="username" value="{{ user.username }}">
+      <button class="btn btn-secondary btn-sm" type="submit">Unlock User</button>
+    </form>
+    {% endif %}
     <form method="POST" action="/admin/userlock">
       <input type="hidden" name="username" value="{{ user.username }}">
       <button class="btn btn-secondary btn-sm" type="submit">Lock / Generate Recovery Link</button>

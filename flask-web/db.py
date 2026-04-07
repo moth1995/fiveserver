@@ -147,6 +147,13 @@ def lock_user(conn: pymysql.connections.Connection,
             (nonce, user_id))
 
 
+def unlock_user(conn: pymysql.connections.Connection,
+                user_id: int) -> None:
+    """Clear reset_nonce, restoring full access to the account."""
+    with conn.cursor() as cur:
+        cur.execute('UPDATE users SET reset_nonce = NULL WHERE id = %s', (user_id,))
+
+
 def delete_user(conn: pymysql.connections.Connection,
                 user_id: int) -> None:
     """Soft-delete: set deleted=1."""

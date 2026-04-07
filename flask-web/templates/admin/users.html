@@ -27,10 +27,17 @@
     </td>
     <td>{{ u.updated_on or '—' }}</td>
     <td>
+      {% if u.reset_nonce %}
+      <form method="POST" action="/admin/userunlock" style="display:inline">
+        <input type="hidden" name="username" value="{{ u.username }}">
+        <button class="btn btn-secondary btn-sm" type="submit">Unlock</button>
+      </form>
+      {% else %}
       <form method="POST" action="/admin/userlock" style="display:inline">
         <input type="hidden" name="username" value="{{ u.username }}">
         <button class="btn btn-secondary btn-sm" type="submit">Lock</button>
       </form>
+      {% endif %}
       <form method="POST" action="/admin/userkill" style="display:inline">
         <input type="hidden" name="username" value="{{ u.username }}">
         <button class="btn btn-danger btn-sm" type="submit"
