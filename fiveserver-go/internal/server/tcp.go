@@ -1,7 +1,9 @@
 package server
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"sync"
@@ -40,6 +42,7 @@ func (c *Conn) Send(pkt protocol.Packet) error {
 
 // SendData builds a Packet from id + data and calls Send.
 func (c *Conn) SendData(id uint16, data []byte) error {
+	log.Printf("[tcp] %s: send pkt 0x%04x len=%d", c.RemoteAddr, id, len(data))
 	return c.Send(protocol.Packet{
 		Header: protocol.Header{
 			ID:          id,
@@ -118,6 +121,9 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 	for {
 		n, err := conn.Conn.Read(tmp)
 		if err != nil {
+			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
+				log.Printf("[tcp] %s: read error: %v", conn.RemoteAddr, err)
+			}
 			return
 		}
 		buf = append(buf, tmp[:n]...)
@@ -136,6 +142,10 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 			}
 
 			total := int(hdr.Length) + 24
+			if total > 65536 {
+				log.Printf("[tcp] %s: pkt 0x%04x: absurd length %d — closing", conn.RemoteAddr, hdr.ID, hdr.Length)
+				return
+			}
 			if len(buf) < total {
 				break
 			}
