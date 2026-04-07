@@ -32,12 +32,61 @@
 <p style="color:#64748b;">No players currently online.</p>
 {% endif %}
 
-<h2 style="margin-top:32px;">Lobbies</h2>
+{# ------------------------------------------------------------------ #}
+<div style="display:flex;align-items:center;gap:12px;margin-top:32px;margin-bottom:12px;">
+  <h2 style="margin:0;">Lobbies</h2>
+  {% if edit_mode %}
+  <a class="btn btn-secondary btn-sm" href="/admin">&#10006; Exit Edit</a>
+  {% else %}
+  <a class="btn btn-secondary btn-sm" href="/admin?edit=1">&#9998; Edit Lobbies</a>
+  {% endif %}
+</div>
+
 {% if lobby_saved %}
 <p style="color:#22c55e;margin-bottom:12px;">Lobbies saved.</p>
 {% endif %}
 
-<form class="settings-form" method="POST" action="/admin">
+{% if not edit_mode %}
+{# ---- View mode ---- #}
+<div class="table-wrap">
+<table>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Type</th>
+      <th style="text-align:center;">Show Matches</th>
+      <th style="text-align:center;">Roster Check</th>
+      <th style="text-align:center;">Players</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for lb in lobbies %}
+  <tr>
+    <td>{{ lb.name }}</td>
+    <td>
+      {% if lb.type == 'open' %}Open
+      {% elif lb.type == 'noStats' %}No Stats
+      {% elif lb.type == '1' %}Div 1
+      {% elif lb.type == '2' %}Div 2
+      {% elif lb.type == '3A' %}3A
+      {% elif lb.type == '3B' %}3B
+      {% elif lb.type == 'A' %}Amateur
+      {% else %}{{ lb.type }}{% endif %}
+    </td>
+    <td style="text-align:center;">{% if lb.show_matches %}&#10003;{% else %}&#10007;{% endif %}</td>
+    <td style="text-align:center;">{% if lb.check_roster_hash %}&#10003;{% else %}&#10007;{% endif %}</td>
+    <td style="text-align:center;">{{ lobby_players.get(lb.name, 0) }}</td>
+  </tr>
+  {% else %}
+  <tr><td colspan="5" style="color:#64748b;">No lobbies configured.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+
+{% else %}
+{# ---- Edit mode ---- #}
+<form class="settings-form" method="POST" action="/admin?edit=1">
   <input type="hidden" name="lobby_count" value="{{ lobbies | length }}">
 
   <div class="table-wrap" style="margin-bottom:12px;">
@@ -48,22 +97,23 @@
         <th>Type</th>
         <th style="text-align:center;">Show Matches</th>
         <th style="text-align:center;">Roster Check</th>
+        <th style="text-align:center;">Players</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
     {% for lb in lobbies %}
     <tr>
-      <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:140px;"></td>
+      <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:130px;"></td>
       <td>
         <select name="lobby_type_{{ loop.index0 }}">
-          <option value="open"   {% if lb.type == 'open'   %}selected{% endif %}>Open</option>
-          <option value="noStats"{% if lb.type == 'noStats'%}selected{% endif %}>No Stats</option>
-          <option value="1"      {% if lb.type == '1'      %}selected{% endif %}>Div 1</option>
-          <option value="2"      {% if lb.type == '2'      %}selected{% endif %}>Div 2</option>
-          <option value="3A"     {% if lb.type == '3A'     %}selected{% endif %}>3A</option>
-          <option value="3B"     {% if lb.type == '3B'     %}selected{% endif %}>3B</option>
-          <option value="A"      {% if lb.type == 'A'      %}selected{% endif %}>Amateur</option>
+          <option value="open"    {% if lb.type == 'open'    %}selected{% endif %}>Open</option>
+          <option value="noStats" {% if lb.type == 'noStats' %}selected{% endif %}>No Stats</option>
+          <option value="1"       {% if lb.type == '1'       %}selected{% endif %}>Div 1</option>
+          <option value="2"       {% if lb.type == '2'       %}selected{% endif %}>Div 2</option>
+          <option value="3A"      {% if lb.type == '3A'      %}selected{% endif %}>3A</option>
+          <option value="3B"      {% if lb.type == '3B'      %}selected{% endif %}>3B</option>
+          <option value="A"       {% if lb.type == 'A'       %}selected{% endif %}>Amateur</option>
         </select>
       </td>
       <td style="text-align:center;">
@@ -74,6 +124,7 @@
         <input type="checkbox" name="lobby_roster_{{ loop.index0 }}" value="1"
                {% if lb.check_roster_hash %}checked{% endif %}>
       </td>
+      <td style="text-align:center;">{{ lobby_players.get(lb.name, 0) }}</td>
       <td>
         <button class="btn btn-danger btn-sm" type="submit"
                 name="action" value="lobby_remove_{{ loop.index0 }}"
@@ -81,7 +132,7 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="5" style="color:#64748b;">No lobbies configured.</td></tr>
+    <tr><td colspan="6" style="color:#64748b;">No lobbies configured.</td></tr>
     {% endfor %}
     </tbody>
   </table>
@@ -92,5 +143,6 @@
     <button class="btn btn-primary btn-sm" type="submit" name="action" value="lobby_save">Save Lobbies</button>
   </div>
 </form>
+{% endif %}
 
 {% endblock %}

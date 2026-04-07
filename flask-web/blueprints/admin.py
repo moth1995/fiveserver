@@ -95,6 +95,7 @@ def _get_online_users() -> list[dict[str, Any]]:
 def home() -> str:
     conn = get_db()
     cfg = current_app.config["FS_CONFIG"]
+    edit_mode: bool = request.args.get("edit") == "1"
     lobby_saved = False
 
     if request.method == "POST":
@@ -103,12 +104,14 @@ def home() -> str:
 
         if action == "lobby_add":
             lobbies_display.append({
-                'name': '', 'type': '', 'show_matches': True, 'check_roster_hash': False,
+                'name': '', 'type': 'open', 'show_matches': True, 'check_roster_hash': True,
             })
+            edit_mode = True
         elif action.startswith("lobby_remove_"):
             idx = int(action.split("_")[-1])
             if 0 <= idx < len(lobbies_display):
                 lobbies_display.pop(idx)
+            edit_mode = True
         elif action == "lobby_save":
             cfg.Lobbies = _lobbies_to_yaml(lobbies_display)
             try:
@@ -116,17 +119,28 @@ def home() -> str:
                 lobby_saved = True
             except Exception:
                 pass
+            # return to view mode after saving
+            edit_mode = False
     else:
         lobbies_display = _normalize_lobbies(cfg.get("Lobbies", []))
 
     total, _ = browse_users(conn, offset=0, limit=1)
     online_users = _get_online_users()
+
+    # Count players per lobby name from online users
+    lobby_players: dict[str, int] = {}
+    for u in online_users:
+        lobby_name: str = u.get("lobby", "")
+        lobby_players[lobby_name] = lobby_players.get(lobby_name, 0) + 1
+
     return render_template(
         "admin/home.html",
         user_count=total,
         online_users=online_users,
         lobbies=lobbies_display,
+        lobby_players=lobby_players,
         lobby_saved=lobby_saved,
+        edit_mode=edit_mode,
     )
 
 
