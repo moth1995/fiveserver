@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -44,11 +45,12 @@ func (d *Dispatcher) Register(id uint16, h HandlerFunc) {
 	d.handlers[id] = h
 }
 
-// Dispatch calls the handler for pkt.Header.ID. Unknown IDs are silently dropped.
+// Dispatch calls the handler for pkt.Header.ID. Unknown IDs are logged and dropped.
 func (d *Dispatcher) Dispatch(s *Session, pkt Packet) error {
 	h, ok := d.handlers[pkt.Header.ID]
 	if !ok {
-		return nil // matches Python defaultHandler: pass
+		log.Printf("[dispatch] %s: no handler for pkt 0x%04x — dropping", s.Conn.RemoteAddr, pkt.Header.ID)
+		return nil
 	}
 	return h(s, pkt)
 }
