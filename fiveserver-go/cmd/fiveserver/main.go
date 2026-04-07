@@ -71,7 +71,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			log.Printf("listening on %s", addr)
-			if err := server.Serve(addr, d, ctx.Done()); err != nil {
+			if err := server.Serve(addr, d, ctx.Done(), cfg.Debug); err != nil {
 				log.Printf("server %s: %v", addr, err)
 			}
 		}()
