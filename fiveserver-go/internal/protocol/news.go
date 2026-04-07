@@ -150,10 +150,7 @@ func makeGetServerList(hub *Hub, version string) HandlerFunc {
 			loginPort = cfg.NetworkServer.LoginService["pes5"] // fallback
 		}
 
-		serverIP := cfg.ServerIP
-		if serverIP == "" || serverIP == "auto" {
-			serverIP = "" // IP not resolved yet; clients will see empty — check ResolveServerIP
-		}
+		serverIP := cfg.ServerIPWAN()
 
 		onlineCount := hub.OnlineCount()
 		if onlineCount > 0 {

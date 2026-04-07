@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -39,6 +40,9 @@ type Config struct {
 
 	// runtime-only: parsed banned list entries (net, mask) in host byte order
 	fastBanned []bannedEntry
+	// runtime-only: resolved WAN IP (set by ResolveServerIP in the background)
+	ipMu       sync.RWMutex
+	resolvedIP string
 }
 
 // ---- nested types -----------------------------------------------------------
@@ -216,38 +220,53 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// ResolveServerIP resolves cfg.ServerIP when it is "auto" or empty.
-// Fetches the WAN address from cfg.IpDetectUri, retrying with exponential
-// back-off (delay doubles each attempt, capped at 120 s) until it succeeds —
-// matching Python FiveServerConfig.setIP exactly.
+// ServerIPWAN returns the resolved WAN IP. Safe for concurrent use.
+func (c *Config) ServerIPWAN() string {
+	c.ipMu.RLock()
+	defer c.ipMu.RUnlock()
+	return c.resolvedIP
+}
+
+// ResolveServerIP starts a background goroutine that resolves the WAN IP.
+// If ServerIP is set explicitly it is used immediately; otherwise it fetches
+// from IpDetectUri (default: http://mapote.com/cgi-bin/ip.py) and retries
+// with exponential back-off (doubles each attempt, capped at 120 s) —
+// matching Python FiveServerConfig.setIP exactly. Non-blocking.
 func (c *Config) ResolveServerIP() {
 	if c.ServerIP != "" && c.ServerIP != "auto" {
-		log.Printf("fiveserver: server IP: %s", c.ServerIP)
+		c.ipMu.Lock()
+		c.resolvedIP = c.ServerIP
+		c.ipMu.Unlock()
+		log.Printf("fiveserver: server IP: %s", c.resolvedIP)
 		return
 	}
 	uri := c.IpDetectUri
 	if uri == "" {
-		log.Printf("fiveserver: WARNING: ServerIP is 'auto' but IpDetectUri is not configured")
-		return
+		uri = "http://mapote.com/cgi-bin/ip.py"
 	}
-	hc := &http.Client{Timeout: 10 * time.Second}
-	retryDelay := time.Second
-	for {
-		resp, err := hc.Get(uri)
-		if err == nil {
-			body, rerr := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if rerr == nil {
-				c.ServerIP = strings.TrimSpace(string(body))
-				log.Printf("fiveserver: server IP: %s", c.ServerIP)
-				return
+	go func() {
+		hc := &http.Client{Timeout: 10 * time.Second}
+		retryDelay := time.Second
+		for {
+			resp, err := hc.Get(uri)
+			if err == nil {
+				body, rerr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if rerr == nil {
+					ip := strings.TrimSpace(string(body))
+					c.ipMu.Lock()
+					c.resolvedIP = ip
+					c.ipMu.Unlock()
+					log.Printf("fiveserver: server IP: %s", ip)
+					return
+				}
+				err = rerr
 			}
-			err = rerr
+			retryDelay = min(retryDelay*2, 120*time.Second)
+			log.Printf("fiveserver: failed to determine server IP-address (ERROR: %v). Trying again in %d seconds", err, int(retryDelay.Seconds()))
+			time.Sleep(retryDelay)
 		}
-		retryDelay = min(retryDelay*2, 120*time.Second)
-		log.Printf("fiveserver: failed to determine server IP-address (ERROR: %v). Trying again in %s", err, retryDelay)
-		time.Sleep(retryDelay)
-	}
+	}()
 }
 
 // loadBannedList reads Config.BannedList YAML and builds fastBanned.
