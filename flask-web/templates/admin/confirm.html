@@ -1,3 +1,13 @@
 {% extends "admin/layout.html" %}
-{% block title %}Confirm{% endblock %}
-{% block body %}<!-- stub -->{% endblock %}
+{% block title %}{{ title }}{% endblock %}
+{% block body %}
+<h2>{{ title }}</h2>
+<p>{{ message }}</p>
+{% if detail %}<p>{{ detail }}</p>{% endif %}
+{% if form_action %}
+<form method="POST" action="{{ form_action }}">
+  <label>{{ form_label }}: <input type="text" name="{{ form_field }}"></label>
+  <button type="submit">{{ button_label }}</button>
+</form>
+{% endif %}
+{% endblock %}
