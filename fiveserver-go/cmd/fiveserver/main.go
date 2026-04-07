@@ -59,7 +59,13 @@ func main() {
 		listenOn = "0.0.0.0"
 	}
 
-	listen := func(addr string, d *protocol.Dispatcher) {
+	usedPorts := make(map[int]bool)
+	listen := func(addr string, port int, d *protocol.Dispatcher) {
+		if usedPorts[port] {
+			log.Printf("skipping duplicate port %d", port)
+			return
+		}
+		usedPorts[port] = true
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -72,34 +78,34 @@ func main() {
 
 	// News service — one per game version
 	if cfg.GamePorts.PES5 != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.PES5),
+		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.PES5), cfg.GamePorts.PES5,
 			protocol.NewNewsDispatcher(hub, "pes5"))
 	}
 	if cfg.GamePorts.WE9 != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9),
+		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9), cfg.GamePorts.WE9,
 			protocol.NewNewsDispatcher(hub, "we9"))
 	}
 	if cfg.GamePorts.WE9LE != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9LE),
+		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9LE), cfg.GamePorts.WE9LE,
 			protocol.NewNewsDispatcher(hub, "we9le"))
 	}
 
 	// Login service — one per game version
 	for version, port := range cfg.NetworkServer.LoginService {
 		v, p := version, port
-		listen(fmt.Sprintf("%s:%d", listenOn, p),
+		listen(fmt.Sprintf("%s:%d", listenOn, p), p,
 			protocol.NewLoginDispatcher(hub, sc, v))
 	}
 
 	// Network menu service
 	if cfg.NetworkServer.NetworkMenuService != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.NetworkMenuService),
+		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.NetworkMenuService), cfg.NetworkServer.NetworkMenuService,
 			protocol.NewMenuDispatcher(hub, sc, "pes5"))
 	}
 
 	// Main game service
 	if cfg.NetworkServer.MainService != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.MainService),
+		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.MainService), cfg.NetworkServer.MainService,
 			protocol.NewMainServiceDispatcher(hub, sc, "pes5"))
 	}
 

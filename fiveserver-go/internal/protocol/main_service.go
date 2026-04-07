@@ -3,6 +3,7 @@ package protocol
 import (
 	"context"
 	"encoding/binary"
+	"log"
 	"time"
 
 	"github.com/fiveserver/fiveserver-go/internal/db"
@@ -64,6 +65,7 @@ func handleCreateRoom4310(hub *Hub) HandlerFunc {
 
 		room.Enter(s.User)
 		lobby.AddRoom(room)
+		log.Printf("[main] Room created: %q (id=%d) by %s", room.Name, room.ID, s.User.Profile.Name)
 
 		// Notify all lobby members of new room
 		roomData := encodeRoomUpdate(room, false)
@@ -187,6 +189,11 @@ func handleSelectTeam4366(hub *Hub) HandlerFunc {
 			room.Match.AwayTeamID = team
 		}
 		s.User.State.TeamID = team
+		log.Printf("[main] Team selected: %d by %s", team, s.User.Profile.Name)
+		if room.Match != nil && room.Match.HomeProfileID != 0 && room.Match.AwayProfileID != 0 {
+			log.Printf("[main] NEW MATCH starting: Team %d vs Team %d",
+				room.Match.HomeTeamID, room.Match.AwayTeamID)
+		}
 		return s.Conn.SendData(0x4367, []byte{0, 0, 0, 1})
 	}
 }
@@ -204,8 +211,10 @@ func handleGoalScored4368(hub *Hub) HandlerFunc {
 		}
 		if len(pkt.Data) > 0 && pkt.Data[0] == 0 {
 			room.Match.ScoreHome++
+			log.Printf("[main] GOAL by HOME team %d — score %d:%d", room.Match.HomeTeamID, room.Match.ScoreHome, room.Match.ScoreAway)
 		} else {
 			room.Match.ScoreAway++
+			log.Printf("[main] GOAL by AWAY team %d — score %d:%d", room.Match.AwayTeamID, room.Match.ScoreHome, room.Match.ScoreAway)
 		}
 		return s.Conn.SendData(0x4369, []byte{0, 0, 0, 0})
 	}
@@ -346,6 +355,7 @@ func handleChallenge4320(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 		// Check game version compatibility
 		if room.Owner.GameVersion != s.User.GameVersion {
+			log.Printf("[main] INFO: Game version mismatch. Match CANCELLED.")
 			return s.Conn.SendData(0x4321, []byte{0, 0, 0, 1})
 		}
 
@@ -353,6 +363,8 @@ func handleChallenge4320(hub *Hub, sc *db.StorageController) HandlerFunc {
 		if lobby.CheckRosterHash && hub.Config().Roster.CompareHash {
 			if s.User.Info != nil && room.Owner.Info != nil {
 				if s.User.Info.RosterHash != room.Owner.Info.RosterHash {
+					log.Printf("[main] INFO: Roster-hash mismatch: %s != %s. Match CANCELLED.",
+						s.User.Profile.Name, room.Owner.Profile.Name)
 					return s.Conn.SendData(0x4321, []byte{0, 0, 0, 1})
 				}
 			}
@@ -618,6 +630,8 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 		// Mutual disconnect: disregard
 		if homeExitByte == 1 && awayExitByte == 1 {
+			log.Printf("[main] MUTUAL DISCONNECT: Team %d vs Team %d — %d:%d. Match DISREGARDED.",
+				match.HomeTeamID, match.AwayTeamID, match.ScoreHome, match.ScoreAway)
 			return nil
 		}
 
@@ -626,6 +640,9 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 		if !ok || lobby.TypeCode == 0x20 {
 			return nil
 		}
+
+		log.Printf("[main] MATCH FINISHED: Team %d vs Team %d — %d:%d",
+			match.HomeTeamID, match.AwayTeamID, match.ScoreHome, match.ScoreAway)
 
 		ctx := context.Background()
 		dbMatch := &model.Match{
@@ -638,7 +655,7 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 			PlayedOn:      time.Now(),
 		}
 		if _, err := db.RecordMatch(ctx, sc, dbMatch); err != nil {
-			// Log but don't fail the handler
+			log.Printf("[main] ERROR recording match: %v", err)
 			return nil
 		}
 
@@ -669,6 +686,9 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 func handleMainDisconnect(hub *Hub, sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
+		if s.User != nil && s.User.Profile != nil {
+			log.Printf("[main] User {%s} disconnected", s.User.Profile.Name)
+		}
 		if s.User != nil && s.User.State != nil {
 			applyDisconnectPenalty(hub, sc, s)
 		}
