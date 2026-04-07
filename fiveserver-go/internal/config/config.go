@@ -3,8 +3,13 @@ package config
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"net/http"
 	"os"
+	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -209,6 +214,40 @@ func Load(path string) (*Config, error) {
 		_ = err
 	}
 	return &cfg, nil
+}
+
+// ResolveServerIP resolves cfg.ServerIP: if it is "auto" or empty it fetches
+// the WAN address from cfg.IpDetectUri (mirrors Python FiveServerConfig.setIP).
+// On success, cfg.ServerIP is updated in place. Retries up to 3 times.
+func (c *Config) ResolveServerIP() {
+	if c.ServerIP != "" && c.ServerIP != "auto" {
+		log.Printf("fiveserver: server IP: %s", c.ServerIP)
+		return
+	}
+	uri := c.IpDetectUri
+	if uri == "" {
+		uri = "http://checkip.amazonaws.com"
+	}
+	client := &http.Client{Timeout: 10 * time.Second}
+	delay := time.Second
+	for attempt := 1; attempt <= 3; attempt++ {
+		resp, err := client.Get(uri)
+		if err == nil {
+			body, rerr := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if rerr == nil {
+				ip := strings.TrimSpace(string(body))
+				c.ServerIP = ip
+				log.Printf("fiveserver: server IP (auto-detected): %s", ip)
+				return
+			}
+			err = rerr
+		}
+		log.Printf("fiveserver: failed to detect WAN IP (attempt %d/3): %v — retrying in %s", attempt, err, delay)
+		time.Sleep(delay)
+		delay *= 2
+	}
+	log.Printf("fiveserver: WARNING: could not auto-detect server IP; clients may not be able to connect")
 }
 
 // loadBannedList reads Config.BannedList YAML and builds fastBanned.

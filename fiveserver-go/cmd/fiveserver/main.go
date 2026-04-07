@@ -27,6 +27,7 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 	log.Printf("fiveserver: loaded config from %s", *configPath)
+	cfg.ResolveServerIP()
 
 	// ---- 2. Init storage controller -------------------------------------------
 	sc, err := db.NewStorageController(cfg.DB)

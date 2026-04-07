@@ -152,7 +152,7 @@ func makeGetServerList(hub *Hub, version string) HandlerFunc {
 
 		serverIP := cfg.ServerIP
 		if serverIP == "" || serverIP == "auto" {
-			serverIP = "127.0.0.1" // placeholder until WAN detection is wired
+			serverIP = "" // IP not resolved yet; clients will see empty — check ResolveServerIP
 		}
 
 		onlineCount := hub.OnlineCount()
