@@ -57,6 +57,7 @@ class AppConfig:
         with open(self._yaml_file, 'wt', encoding='utf-8') as f:
             yaml.dump(original, f, indent=4, default_flow_style=False,
                       sort_keys=False, allow_unicode=True)
+        self._dirty_keys.clear()
 
 
 def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:

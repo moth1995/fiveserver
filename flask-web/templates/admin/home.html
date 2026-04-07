@@ -32,17 +32,56 @@
 <p style="color:#64748b;">No players currently online.</p>
 {% endif %}
 
-{% if lobbies %}
-<h2 style="margin-top:28px;">Lobbies</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Name</th></tr></thead>
-  <tbody>
-  {% for lobby in lobbies %}
-  <tr><td>{% if lobby is mapping %}{{ lobby.name }}{% else %}{{ lobby }}{% endif %}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+<h2 style="margin-top:32px;">Lobbies</h2>
+{% if lobby_saved %}
+<p style="color:#22c55e;margin-bottom:12px;">Lobbies saved.</p>
 {% endif %}
+
+<form class="settings-form" method="POST" action="/admin">
+  <input type="hidden" name="lobby_count" value="{{ lobbies | length }}">
+
+  <div class="table-wrap" style="margin-bottom:12px;">
+  <table>
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Type</th>
+        <th style="text-align:center;">Show Matches</th>
+        <th style="text-align:center;">Roster Check</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for lb in lobbies %}
+    <tr>
+      <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:140px;"></td>
+      <td><input type="text" name="lobby_type_{{ loop.index0 }}" value="{{ lb.type }}"
+                 style="width:100px;" placeholder="e.g. A or noStats"></td>
+      <td style="text-align:center;">
+        <input type="checkbox" name="lobby_show_{{ loop.index0 }}" value="1"
+               {% if lb.show_matches %}checked{% endif %}>
+      </td>
+      <td style="text-align:center;">
+        <input type="checkbox" name="lobby_roster_{{ loop.index0 }}" value="1"
+               {% if lb.check_roster_hash %}checked{% endif %}>
+      </td>
+      <td>
+        <button class="btn btn-danger btn-sm" type="submit"
+                name="action" value="lobby_remove_{{ loop.index0 }}"
+                onclick="return confirm('Remove lobby?')">Remove</button>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="5" style="color:#64748b;">No lobbies configured.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-secondary btn-sm" type="submit" name="action" value="lobby_add">+ Add Lobby</button>
+    <button class="btn btn-primary btn-sm" type="submit" name="action" value="lobby_save">Save Lobbies</button>
+  </div>
+</form>
+
 {% endblock %}
