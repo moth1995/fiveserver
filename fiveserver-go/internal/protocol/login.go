@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/hex"
-	"fmt"
+	"log"
 	"math"
 
 	"github.com/fiveserver/fiveserver-go/internal/crypto"
@@ -57,9 +57,12 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 	keyBytes, _ := hex.DecodeString(cipherKey)
 
 	return func(s *Session, pkt Packet) error {
+		log.Printf("[login] %s: 0x3003 authenticate — data len=%d", s.Conn.RemoteAddr, len(pkt.Data))
+
 		// Decrypt the packet data with Blowfish ECB
 		decrypted, err := crypto.DecryptECB(keyBytes, pkt.Data)
 		if err != nil {
+			log.Printf("[login] %s: blowfish decrypt failed: %v", s.Conn.RemoteAddr, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
 
@@ -74,29 +77,35 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		if len(pkt.Data) >= 48 {
 			userHash = hex.EncodeToString(pkt.Data[32:48])
 		}
+		log.Printf("[login] %s: userHash=%s", s.Conn.RemoteAddr, userHash)
 
 		ctx := context.Background()
 		u, err := db.GetUserByHash(ctx, sc, userHash)
 		if err != nil {
-			// Unknown user → auth error
+			log.Printf("[login] %s: user not found (hash=%s): %v", s.Conn.RemoteAddr, userHash, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
+		log.Printf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
 
 		// Check if already online
 		if _, online := hub.GetSession(userHashKey(u)); online {
+			log.Printf("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
 			return s.Conn.SendData(0x3004, pack32(0xffffff11))
 		}
 
 		// Roster hash check
 		if hub.Config().Roster.EnforceHash && hasNullBlock(clientRosterHash) {
+			log.Printf("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
 			return s.Conn.SendData(0x3004, pack32(0xffffff12))
 		}
 
 		// Load profiles
 		profiles, err := db.GetProfilesByUserID(ctx, sc, u.ID)
 		if err != nil {
+			log.Printf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
+		log.Printf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
 		// Ensure exactly 3 profile slots (nil = empty)
 		for len(profiles) < 3 {
 			profiles = append(profiles, &model.Profile{Ordinal: len(profiles)})
@@ -452,5 +461,3 @@ func getPoints(wins, losses, draws int) int {
 	return int(1000 * score)
 }
 
-// suppress unused import warning
-var _ = fmt.Sprintf

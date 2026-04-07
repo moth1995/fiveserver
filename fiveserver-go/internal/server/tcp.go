@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -85,6 +86,7 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}) error {
 			RemoteAddr:  raw.RemoteAddr().String(),
 			packetCount: 1,
 		}
+		log.Printf("[tcp] connection accepted from %s", conn.RemoteAddr)
 		go serveConn(conn, d)
 	}
 }
@@ -92,7 +94,10 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}) error {
 // serveConn builds a Session+ConnSender for one accepted connection and runs
 // the packet read loop, dispatching every packet through d.
 func serveConn(conn *Conn, d *protocol.Dispatcher) {
-	defer conn.Close()
+	defer func() {
+		log.Printf("[tcp] connection closed: %s", conn.RemoteAddr)
+		conn.Close()
+	}()
 
 	// ConnSender shim: bridges server.Conn to protocol.Session without an
 	// import cycle (protocol cannot import server).
@@ -126,6 +131,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 			hdrBytes := crypto.XorData(buf[:8], 0)
 			hdr, err := protocol.UnmarshalHeader(hdrBytes)
 			if err != nil {
+				log.Printf("[tcp] %s: bad header: %v", conn.RemoteAddr, err)
 				return
 			}
 
@@ -144,8 +150,11 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 
 			pkt, err := protocol.Unmarshal(full)
 			if err != nil {
+				log.Printf("[tcp] %s: unmarshal error: %v", conn.RemoteAddr, err)
 				return
 			}
+
+			log.Printf("[tcp] %s: recv pkt 0x%04x len=%d", conn.RemoteAddr, pkt.Header.ID, pkt.Header.Length)
 
 			// Heartbeat: echo back, no dispatch
 			if pkt.Header.ID == 0x0005 {
@@ -154,7 +163,9 @@ func serveConn(conn *Conn, d *protocol.Dispatcher) {
 				continue
 			}
 
-			_ = d.Dispatch(s, pkt)
+			if err := d.Dispatch(s, pkt); err != nil {
+				log.Printf("[tcp] %s: dispatch 0x%04x error: %v", conn.RemoteAddr, pkt.Header.ID, err)
+			}
 		}
 	}
 }
