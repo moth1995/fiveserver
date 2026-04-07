@@ -216,9 +216,10 @@ func Load(path string) (*Config, error) {
 	return &cfg, nil
 }
 
-// ResolveServerIP resolves cfg.ServerIP: if it is "auto" or empty it fetches
-// the WAN address from cfg.IpDetectUri (mirrors Python FiveServerConfig.setIP).
-// On success, cfg.ServerIP is updated in place. Retries up to 3 times.
+// ResolveServerIP resolves cfg.ServerIP when it is "auto" or empty.
+// Fetches the WAN address from cfg.IpDetectUri, retrying with exponential
+// back-off (delay doubles each attempt, capped at 120 s) until it succeeds —
+// matching Python FiveServerConfig.setIP exactly.
 func (c *Config) ResolveServerIP() {
 	if c.ServerIP != "" && c.ServerIP != "auto" {
 		log.Printf("fiveserver: server IP: %s", c.ServerIP)
@@ -226,28 +227,27 @@ func (c *Config) ResolveServerIP() {
 	}
 	uri := c.IpDetectUri
 	if uri == "" {
-		uri = "http://checkip.amazonaws.com"
+		log.Printf("fiveserver: WARNING: ServerIP is 'auto' but IpDetectUri is not configured")
+		return
 	}
-	client := &http.Client{Timeout: 10 * time.Second}
-	delay := time.Second
-	for attempt := 1; attempt <= 3; attempt++ {
-		resp, err := client.Get(uri)
+	hc := &http.Client{Timeout: 10 * time.Second}
+	retryDelay := time.Second
+	for {
+		resp, err := hc.Get(uri)
 		if err == nil {
 			body, rerr := io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if rerr == nil {
-				ip := strings.TrimSpace(string(body))
-				c.ServerIP = ip
-				log.Printf("fiveserver: server IP (auto-detected): %s", ip)
+				c.ServerIP = strings.TrimSpace(string(body))
+				log.Printf("fiveserver: server IP: %s", c.ServerIP)
 				return
 			}
 			err = rerr
 		}
-		log.Printf("fiveserver: failed to detect WAN IP (attempt %d/3): %v — retrying in %s", attempt, err, delay)
-		time.Sleep(delay)
-		delay *= 2
+		retryDelay = min(retryDelay*2, 120*time.Second)
+		log.Printf("fiveserver: failed to determine server IP-address (ERROR: %v). Trying again in %s", err, retryDelay)
+		time.Sleep(retryDelay)
 	}
-	log.Printf("fiveserver: WARNING: could not auto-detect server IP; clients may not be able to connect")
 }
 
 // loadBannedList reads Config.BannedList YAML and builds fastBanned.
