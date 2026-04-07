@@ -7,8 +7,6 @@
 {% endif %}
 
 <form class="settings-form" method="POST" action="/admin/settings">
-  <input type="hidden" name="action" value="save">
-  <input type="hidden" name="lobby_count" value="{{ lobbies | length }}">
 
   {# ------------------------------------------------------------------ #}
   <div class="form-group">
@@ -110,47 +108,6 @@
                 style="width:280px;font-family:monospace;font-size:.85rem;"
                 placeholder="One word per line">{{ banned_words }}</textarea>
     </div>
-  </div>
-
-  {# ------------------------------------------------------------------ #}
-  <div class="form-group">
-    <h2>Lobbies</h2>
-    <div class="table-wrap" style="margin-bottom:12px;">
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th style="text-align:center;">Show Matches</th>
-          <th style="text-align:center;">Roster Check</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-      {% for lb in lobbies %}
-      <tr>
-        <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:130px;"></td>
-        <td><input type="text" name="lobby_type_{{ loop.index0 }}" value="{{ lb.type }}"
-                   style="width:90px;" placeholder="e.g. A or noStats"></td>
-        <td style="text-align:center;">
-          <input type="checkbox" name="lobby_show_{{ loop.index0 }}" value="1"
-                 {% if lb.show_matches %}checked{% endif %}>
-        </td>
-        <td style="text-align:center;">
-          <input type="checkbox" name="lobby_roster_{{ loop.index0 }}" value="1"
-                 {% if lb.check_roster_hash %}checked{% endif %}>
-        </td>
-        <td>
-          <button class="btn btn-danger btn-sm" type="submit"
-                  name="action" value="lobby_remove_{{ loop.index0 }}"
-                  onclick="return confirm('Remove lobby {{ lb.name }}?')">Remove</button>
-        </td>
-      </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-    <button class="btn btn-secondary btn-sm" type="submit" name="action" value="lobby_add">+ Add Lobby</button>
   </div>
 
   {# ------------------------------------------------------------------ #}

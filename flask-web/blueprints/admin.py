@@ -90,19 +90,43 @@ def _get_online_users() -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-@admin_bp.route("/")
-@admin_bp.route("/home")
+@admin_bp.route("/", methods=["GET", "POST"])
+@admin_bp.route("/home", methods=["GET", "POST"])
 def home() -> str:
     conn = get_db()
+    cfg = current_app.config["FS_CONFIG"]
+    lobby_saved = False
+
+    if request.method == "POST":
+        action: str = request.form.get("action", "")
+        lobbies_display = _parse_lobbies_from_form(request.form)
+
+        if action == "lobby_add":
+            lobbies_display.append({
+                'name': '', 'type': '', 'show_matches': True, 'check_roster_hash': False,
+            })
+        elif action.startswith("lobby_remove_"):
+            idx = int(action.split("_")[-1])
+            if 0 <= idx < len(lobbies_display):
+                lobbies_display.pop(idx)
+        elif action == "lobby_save":
+            cfg.Lobbies = _lobbies_to_yaml(lobbies_display)
+            try:
+                cfg.save()
+                lobby_saved = True
+            except Exception:
+                pass
+    else:
+        lobbies_display = _normalize_lobbies(cfg.get("Lobbies", []))
+
     total, _ = browse_users(conn, offset=0, limit=1)
     online_users = _get_online_users()
-    cfg = current_app.config["FS_CONFIG"]
-    lobbies: list[Any] = cfg.get("Lobbies", [])
     return render_template(
         "admin/home.html",
         user_count=total,
         online_users=online_users,
-        lobbies=lobbies,
+        lobbies=lobbies_display,
+        lobby_saved=lobby_saved,
     )
 
 
@@ -422,68 +446,53 @@ def settings() -> str:
     saved = False
 
     if request.method == "POST":
-        action: str = request.form.get("action", "save")
-        lobbies_display = _parse_lobbies_from_form(request.form)
+        # General
+        cfg.Debug = "debug" in request.form
+        cfg.MaxUsers = int(request.form.get("max_users", 1000))
+        cfg.StoreSettings = "store_settings" in request.form
+        cfg.ShowStats = "show_stats" in request.form
+        cfg.ServerName = request.form.get("server_name", "Fiveserver").strip()
 
-        if action == "lobby_add":
-            lobbies_display.append({'name': '', 'type': '', 'show_matches': True, 'check_roster_hash': False})
-        elif action.startswith("lobby_remove_"):
-            idx = int(action.split("_")[-1])
-            if 0 <= idx < len(lobbies_display):
-                lobbies_display.pop(idx)
-        else:
-            # General
-            cfg.Debug = "debug" in request.form
-            cfg.MaxUsers = int(request.form.get("max_users", 1000))
-            cfg.StoreSettings = "store_settings" in request.form
-            cfg.ShowStats = "show_stats" in request.form
-            cfg.ServerName = request.form.get("server_name", "Fiveserver").strip()
+        # Greeting
+        cfg.Greeting = {"text": request.form.get("greeting", "")}
 
-            # Greeting
-            cfg.Greeting = {"text": request.form.get("greeting", "")}
+        # Roster
+        cfg.Roster = {
+            "enforceHash": "enforce_hash" in request.form,
+            "compareHash": "compare_hash" in request.form,
+        }
 
-            # Roster
-            cfg.Roster = {
-                "enforceHash": "enforce_hash" in request.form,
-                "compareHash": "compare_hash" in request.form,
+        # Disconnects
+        cfg.Disconnects = {
+            "CountAsLoss": {
+                "Enabled": "dc_enabled" in request.form,
+                "Score": {
+                    "player": int(request.form.get("dc_score_player", 0)),
+                    "opponent": int(request.form.get("dc_score_opponent", 3)),
+                },
             }
+        }
 
-            # Disconnects
-            cfg.Disconnects = {
-                "CountAsLoss": {
-                    "Enabled": "dc_enabled" in request.form,
-                    "Score": {
-                        "player": int(request.form.get("dc_score_player", 0)),
-                        "opponent": int(request.form.get("dc_score_opponent", 3)),
-                    },
-                }
-            }
+        # Compute ranks interval
+        cfg.ComputeRanksInterval = {
+            "days": int(request.form.get("ranks_days", 1)),
+            "seconds": int(request.form.get("ranks_seconds", 0)),
+        }
 
-            # Compute ranks interval
-            cfg.ComputeRanksInterval = {
-                "days": int(request.form.get("ranks_days", 1)),
-                "seconds": int(request.form.get("ranks_seconds", 0)),
-            }
+        # Chat — preserve warningMessage, only update bannedWords
+        warning_msg: str = cfg.get("Chat", {}).get("warningMessage", "")
+        banned_words: list[str] = [
+            w.strip()
+            for w in request.form.get("banned_words", "").splitlines()
+            if w.strip()
+        ]
+        cfg.Chat = {"bannedWords": banned_words, "warningMessage": warning_msg}
 
-            # Chat
-            warning_msg: str = cfg.get("Chat", {}).get("warningMessage", "")
-            banned_words: list[str] = [
-                w.strip()
-                for w in request.form.get("banned_words", "").splitlines()
-                if w.strip()
-            ]
-            cfg.Chat = {"bannedWords": banned_words, "warningMessage": warning_msg}
-
-            # Lobbies
-            cfg.Lobbies = _lobbies_to_yaml(lobbies_display)
-
-            try:
-                cfg.save()
-                saved = True
-            except Exception:
-                pass
-    else:
-        lobbies_display = _normalize_lobbies(cfg.get("Lobbies", []))
+        try:
+            cfg.save()
+            saved = True
+        except Exception:
+            pass
 
     roster: dict[str, Any] = cfg.get("Roster", {})
     disconnects: dict[str, Any] = cfg.get("Disconnects", {})
@@ -497,28 +506,20 @@ def settings() -> str:
     return render_template(
         "admin/settings.html",
         saved=saved,
-        # General
         server_name=cfg.get("ServerName", "Fiveserver"),
         max_users=cfg.get("MaxUsers", 1000),
         debug=bool(cfg.get("Debug", False)),
         show_stats=bool(cfg.get("ShowStats", True)),
         store_settings=bool(cfg.get("StoreSettings", True)),
-        # Greeting
         greeting=greeting_text,
-        # Roster
         enforce_hash=bool(roster.get("enforceHash", False)),
         compare_hash=bool(roster.get("compareHash", True)),
-        # Disconnects
         dc_enabled=bool(dc_loss.get("Enabled", False)),
         dc_score_player=int(dc_score.get("player", 0)),
         dc_score_opponent=int(dc_score.get("opponent", 3)),
-        # Compute ranks
         ranks_days=int(ranks.get("days", 1)),
         ranks_seconds=int(ranks.get("seconds", 0)),
-        # Chat
         banned_words="\n".join(chat.get("bannedWords", [])),
-        # Lobbies
-        lobbies=lobbies_display,
     )
 
 
