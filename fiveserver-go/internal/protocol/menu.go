@@ -3,6 +3,7 @@ package protocol
 import (
 	"context"
 	"encoding/binary"
+	"log"
 	"strings"
 	"time"
 
@@ -176,8 +177,10 @@ func handleSelectLobby4202(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 		lobby, ok := hub.GetLobby(lobbyID)
 		if !ok {
+			log.Printf("[menu] %s: unknown lobby id %d", s.Conn.RemoteAddr, lobbyID)
 			return nil
 		}
+		log.Printf("[menu] User {%s} entering lobby %d (%s)", s.User.Profile.Name, lobbyID+1, lobby.Name)
 		lobby.Enter(s.User)
 
 		// Notify all lobby members of the new user joining
@@ -316,6 +319,9 @@ func handleQuickMatchSearch4a00(hub *Hub) HandlerFunc {
 		if err := s.Conn.SendData(0x4a01, []byte{0, 0, 0, 1}); err != nil {
 			return err
 		}
+		if s.User != nil && s.User.Profile != nil {
+			log.Printf("[menu] User {%s} exiting lobby %d (quick match search)", s.User.Profile.Name, s.User.LobbyIndex+1)
+		}
 		exitLobbyAndNotify(hub, s)
 		return nil
 	}
@@ -326,6 +332,9 @@ func handleQuickMatchSearch4a00(hub *Hub) HandlerFunc {
 
 func handleMenuDisconnect(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
+		if s.User != nil && s.User.Profile != nil {
+			log.Printf("[menu] User {%s} exiting lobby %d (disconnect)", s.User.Profile.Name, s.User.LobbyIndex+1)
+		}
 		exitLobbyAndNotify(hub, s)
 		if s.User != nil {
 			hub.RemoveSession(s)
