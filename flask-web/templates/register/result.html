@@ -1,5 +1,26 @@
 {% extends "base.html" %}
-{% block title %}{{ "Success" if success else "Error" }} — Fiveserver{% endblock %}
+{% block title %}{{ "Success" if success else "Error" }} — FiveServer{% endblock %}
+{% block head %}
+<style>
+  body { font-family: Arial, sans-serif; background: #f0f0f0; margin: 0; padding: 0; }
+  .container { max-width: 480px; margin: 60px auto; background: #fff;
+               border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 32px 40px; }
+  h2 { margin: 0 0 16px; font-size: 1.4rem; }
+  .success { color: #16a34a; }
+  .error   { color: #dc2626; }
+  .msg { font-size: 1.05rem; margin-bottom: 24px; }
+  a { color: #2563eb; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+{% endblock %}
 {% block content %}
-<p>{{ message }}</p>
+<div class="container">
+  {% if success %}
+    <h2 class="success">&#10003; Success</h2>
+  {% else %}
+    <h2 class="error">&#10007; Error</h2>
+  {% endif %}
+  <p class="msg">{{ message }}</p>
+  <a href="/">&larr; Back to registration</a>
+</div>
 {% endblock %}
