@@ -348,31 +348,177 @@ def userunlock() -> str | tuple[str, int]:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_lobbies(raw: list[Any]) -> list[dict[str, Any]]:
+    """Normalize YAML lobby entries (str or dict) to uniform dicts for the UI."""
+    result: list[dict[str, Any]] = []
+    for entry in raw:
+        if isinstance(entry, str):
+            result.append({
+                'name': entry,
+                'type': '',
+                'show_matches': True,
+                'check_roster_hash': False,
+            })
+        elif isinstance(entry, dict):
+            type_val = entry.get('type', '')
+            if isinstance(type_val, list):
+                type_val = ','.join(type_val)
+            result.append({
+                'name': entry.get('name', ''),
+                'type': str(type_val) if type_val else '',
+                'show_matches': bool(entry.get('showMatches', True)),
+                'check_roster_hash': bool(entry.get('checkRosterHash', False)),
+            })
+    return result
+
+
+def _lobbies_to_yaml(lobbies: list[dict[str, Any]]) -> list[Any]:
+    """Convert UI lobby dicts back to the mixed str/dict YAML format."""
+    result: list[Any] = []
+    for lb in lobbies:
+        name = lb['name'].strip()
+        if not name:
+            continue
+        has_extras = (lb['type'] or not lb['show_matches'] or lb['check_roster_hash'])
+        if not has_extras:
+            result.append(name)
+        else:
+            d: dict[str, Any] = {'name': name}
+            if lb['type']:
+                raw_type = lb['type'].strip()
+                if ',' in raw_type:
+                    d['type'] = [t.strip() for t in raw_type.split(',')]
+                else:
+                    d['type'] = raw_type
+            if not lb['show_matches']:
+                d['showMatches'] = False
+            if lb['check_roster_hash']:
+                d['checkRosterHash'] = True
+            result.append(d)
+    return result
+
+
+def _parse_lobbies_from_form(form: Any) -> list[dict[str, Any]]:
+    """Reconstruct lobby list from indexed form fields."""
+    count = int(form.get('lobby_count', 0))
+    lobbies: list[dict[str, Any]] = []
+    for i in range(count):
+        name = form.get(f'lobby_name_{i}', '').strip()
+        lobbies.append({
+            'name': name,
+            'type': form.get(f'lobby_type_{i}', '').strip(),
+            'show_matches': f'lobby_show_{i}' in form,
+            'check_roster_hash': f'lobby_roster_{i}' in form,
+        })
+    return lobbies
+
+
 @admin_bp.route("/settings", methods=["GET", "POST"])
 @admin_bp.route("/debug", methods=["GET", "POST"])
 @admin_bp.route("/maxusers", methods=["GET", "POST"])
 @admin_bp.route("/roster", methods=["GET", "POST"])
 def settings() -> str:
     cfg = current_app.config["FS_CONFIG"]
+    saved = False
+
     if request.method == "POST":
-        debug_val = "debug" in request.form
-        max_users = int(request.form.get("max_users", cfg.get("MaxUsers", 1000)))
-        store_settings = "store_settings" in request.form
-        roster_check = "roster_check" in request.form
-        cfg.Debug = debug_val
-        cfg.MaxUsers = max_users
-        cfg.StoreSettings = store_settings
-        # Persist back to YAML
-        try:
-            cfg.save()
-        except Exception:
-            pass
+        action: str = request.form.get("action", "save")
+        lobbies_display = _parse_lobbies_from_form(request.form)
+
+        if action == "lobby_add":
+            lobbies_display.append({'name': '', 'type': '', 'show_matches': True, 'check_roster_hash': False})
+        elif action.startswith("lobby_remove_"):
+            idx = int(action.split("_")[-1])
+            if 0 <= idx < len(lobbies_display):
+                lobbies_display.pop(idx)
+        else:
+            # General
+            cfg.Debug = "debug" in request.form
+            cfg.MaxUsers = int(request.form.get("max_users", 1000))
+            cfg.StoreSettings = "store_settings" in request.form
+            cfg.ShowStats = "show_stats" in request.form
+            cfg.ServerName = request.form.get("server_name", "Fiveserver").strip()
+
+            # Greeting
+            cfg.Greeting = {"text": request.form.get("greeting", "")}
+
+            # Roster
+            cfg.Roster = {
+                "enforceHash": "enforce_hash" in request.form,
+                "compareHash": "compare_hash" in request.form,
+            }
+
+            # Disconnects
+            cfg.Disconnects = {
+                "CountAsLoss": {
+                    "Enabled": "dc_enabled" in request.form,
+                    "Score": {
+                        "player": int(request.form.get("dc_score_player", 0)),
+                        "opponent": int(request.form.get("dc_score_opponent", 3)),
+                    },
+                }
+            }
+
+            # Compute ranks interval
+            cfg.ComputeRanksInterval = {
+                "days": int(request.form.get("ranks_days", 1)),
+                "seconds": int(request.form.get("ranks_seconds", 0)),
+            }
+
+            # Chat
+            warning_msg: str = cfg.get("Chat", {}).get("warningMessage", "")
+            banned_words: list[str] = [
+                w.strip()
+                for w in request.form.get("banned_words", "").splitlines()
+                if w.strip()
+            ]
+            cfg.Chat = {"bannedWords": banned_words, "warningMessage": warning_msg}
+
+            # Lobbies
+            cfg.Lobbies = _lobbies_to_yaml(lobbies_display)
+
+            try:
+                cfg.save()
+                saved = True
+            except Exception:
+                pass
+    else:
+        lobbies_display = _normalize_lobbies(cfg.get("Lobbies", []))
+
+    roster: dict[str, Any] = cfg.get("Roster", {})
+    disconnects: dict[str, Any] = cfg.get("Disconnects", {})
+    dc_loss = disconnects.get("CountAsLoss", {})
+    dc_score = dc_loss.get("Score", {})
+    ranks: dict[str, Any] = cfg.get("ComputeRanksInterval", {})
+    chat: dict[str, Any] = cfg.get("Chat", {})
+    greeting: Any = cfg.get("Greeting", "")
+    greeting_text: str = greeting.get("text", "") if isinstance(greeting, dict) else str(greeting)
+
     return render_template(
         "admin/settings.html",
+        saved=saved,
+        # General
+        server_name=cfg.get("ServerName", "Fiveserver"),
+        max_users=cfg.get("MaxUsers", 1000),
         debug=bool(cfg.get("Debug", False)),
-        max_users=int(cfg.get("MaxUsers", 1000)),
+        show_stats=bool(cfg.get("ShowStats", True)),
         store_settings=bool(cfg.get("StoreSettings", True)),
-        roster_check=bool(cfg.get("CheckRosterHash", True)),
+        # Greeting
+        greeting=greeting_text,
+        # Roster
+        enforce_hash=bool(roster.get("enforceHash", False)),
+        compare_hash=bool(roster.get("compareHash", True)),
+        # Disconnects
+        dc_enabled=bool(dc_loss.get("Enabled", False)),
+        dc_score_player=int(dc_score.get("player", 0)),
+        dc_score_opponent=int(dc_score.get("opponent", 3)),
+        # Compute ranks
+        ranks_days=int(ranks.get("days", 1)),
+        ranks_seconds=int(ranks.get("seconds", 0)),
+        # Chat
+        banned_words="\n".join(chat.get("bannedWords", [])),
+        # Lobbies
+        lobbies=lobbies_display,
     )
 
 
