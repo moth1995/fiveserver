@@ -152,7 +152,6 @@ document.addEventListener('keydown', function(e) {
         <th>Type</th>
         <th style="text-align:center;">Show Matches</th>
         <th style="text-align:center;">Roster Check</th>
-        <th style="text-align:center;">Players</th>
         <th></th>
       </tr>
     </thead>
@@ -180,7 +179,6 @@ document.addEventListener('keydown', function(e) {
         <input type="checkbox" name="lobby_roster_{{ loop.index0 }}" value="1"
                {% if lb.check_roster_hash %}checked{% endif %}>
       </td>
-      <td style="text-align:center;">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
       <td>
         <button class="btn btn-danger btn-sm" type="submit"
                 name="action" value="lobby_remove_{{ loop.index0 }}"
@@ -188,7 +186,7 @@ document.addEventListener('keydown', function(e) {
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="6" style="color:#64748b;">No lobbies configured.</td></tr>
+    <tr><td colspan="5" style="color:#64748b;">No lobbies configured.</td></tr>
     {% endfor %}
     </tbody>
   </table>
