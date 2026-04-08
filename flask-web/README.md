@@ -62,6 +62,8 @@ This starts:
 | `ADMIN_USER` | value in `admin.yaml` | Admin panel username |
 | `ADMIN_PASSWORD` | value in `admin.yaml` | Admin panel password |
 | `FLASK_SECRET` | random on startup | Flask session secret key |
+| `GO_API_HOST` | `127.0.0.1` | Go game server API host |
+| `GO_API_PORT` | `8199` | Go game server API port |
 | `DB_HOST` | value in `fiveserver.yaml` | MySQL host override |
 | `DB_USER` | value in `fiveserver.yaml` | MySQL user override |
 | `DB_PASSWORD` | value in `fiveserver.yaml` | MySQL password override |

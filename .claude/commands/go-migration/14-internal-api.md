@@ -1,7 +1,7 @@
 # Step 14 — Go Internal API (Flask bridge endpoints)
 
-Add a localhost-only HTTP server inside the Go binary that exposes all
-endpoints the Flask admin/stats layer needs.
+Add a localhost-only HTTP server inside the Go binary that exposes the
+endpoints the Flask admin/stats layer needs to show live data.
 
 Read first:
 - fiveserver-go/internal/protocol/dispatcher.go  (Hub, Session, MatchState)
@@ -17,14 +17,15 @@ Create branch `go-server/step-14-internal-api` from `go-server`.
 ```go
 package server
 
-// StartInternalAPI starts a localhost-only HTTP server on addr ("127.0.0.1:8199").
-// All endpoints are read-only. hub is the shared dispatcher Hub.
+// StartInternalAPI starts a localhost-only HTTP server.
+// addr defaults to "127.0.0.1:8199" but is configurable via GO_API_PORT.
+// hub is the shared dispatcher Hub.
 func StartInternalAPI(addr string, hub *protocol.Hub) error
 ```
 
 ### Endpoints
 
-#### GET /internal/online-users
+#### GET /online-users
 Returns all currently connected sessions.
 
 ```json
@@ -40,7 +41,7 @@ Data source: `hub.users` map (read with RLock). `since` = session connect time
 
 ---
 
-#### GET /internal/lobby-stats
+#### GET /lobby-stats
 Returns per-lobby player counts and active matches (fiveserver/PES5 only —
 no Match6/sixserver logic).
 
@@ -72,29 +73,13 @@ Data source: `hub.lobbies` slice. For each lobby, iterate `lobby.Players`
 
 ---
 
-#### GET /internal/activity-ping
-Called by the Flask activity recorder (or a future cron job) every 5 minutes
-to snapshot currently online user IDs. Returns the same shape as
-`/internal/online-users` but includes the internal user DB `id`.
-
-```json
-{
-  "users": [
-    {"user_id": 42, "username": "PlayerA", "lobby": "Russia"}
-  ]
-}
-```
-
-Data source: `hub.users` map → `session.User.Id` (already stored on login).
-
----
-
 ## Wire in main.go
 
 After `hub := protocol.NewHub(cfg)`:
 
 ```go
-go server.StartInternalAPI("127.0.0.1:8199", hub)
+apiAddr := fmt.Sprintf("127.0.0.1:%s", getEnvOrDefault("GO_API_PORT", "8199"))
+go server.StartInternalAPI(apiAddr, hub)
 ```
 
 ---
@@ -110,9 +95,8 @@ go server.StartInternalAPI("127.0.0.1:8199", hub)
 
 ```bash
 go build ./...
-curl http://127.0.0.1:8199/internal/online-users   # → {"users":[]}
-curl http://127.0.0.1:8199/internal/lobby-stats    # → {"lobbies":[...]}
-curl http://127.0.0.1:8199/internal/activity-ping  # → {"users":[]}
+curl http://127.0.0.1:8199/online-users   # → {"users":[]}
+curl http://127.0.0.1:8199/lobby-stats    # → {"lobbies":[...]}
 go test ./tests/...
 ```
 

@@ -9,7 +9,7 @@ Read first:
 - fiveserver-go/internal/db/match.go              (match recording)
 - fiveserver-go/internal/db/pool.go               (StorageController)
 - fiveserver-go/internal/protocol/main_service.go (match lifecycle hooks)
-- fiveserver-go/internal/server/internal_api.go   (step 14 — activity ping)
+- fiveserver-go/internal/server/internal_api.go   (step 14 — internal API)
 
 Create branch `go-server/step-15-metrics-schema` from `go-server`
 (after step 14 is merged).
@@ -20,7 +20,7 @@ Create branch `go-server/step-15-metrics-schema` from `go-server`
 
 ```sql
 -- Active users snapshot: one row per user per 5-minute tick.
--- Populated by the Go server via /internal/activity-ping or a goroutine.
+-- Populated directly by the Go server goroutine (no HTTP call needed).
 CREATE TABLE IF NOT EXISTS user_activity (
     id          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
     user_id     INT UNSIGNED    NOT NULL,
