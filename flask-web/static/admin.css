@@ -305,6 +305,162 @@ hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
 a { color: #2563eb; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
+/* ── Stats / Metrics ─────────────────────────────────────────────────────── */
+
+.stats-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  padding: 14px 18px;
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .88rem;
+  color: #475569;
+}
+
+.filter-group label { font-weight: 600; white-space: nowrap; }
+
+.filter-group select,
+.filter-group input[type=date] {
+  padding: 5px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  font-size: .88rem;
+}
+
+.chart-section {
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,.07);
+  padding: 20px 22px;
+  margin-top: 20px;
+}
+
+.chart-section h2 { margin: 0 0 16px; font-size: .95rem; color: #1e293b; }
+
+/* Vertical bar chart (matches per day) */
+.bar-chart-wrap { overflow-x: auto; }
+
+.bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 160px;
+  min-width: max-content;
+  padding-bottom: 24px; /* room for labels */
+  position: relative;
+}
+
+.bar-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  position: relative;
+  width: 22px;
+  height: 100%;
+}
+
+.bar {
+  width: 100%;
+  min-height: 2px;
+  background: #3b82f6;
+  border-radius: 3px 3px 0 0;
+  transition: background .15s;
+  position: relative;
+}
+
+.bar-col:hover .bar { background: #2563eb; }
+
+.bar-tooltip {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: #fff;
+  font-size: .72rem;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+  z-index: 10;
+}
+
+.bar-col:hover .bar-tooltip { opacity: 1; }
+
+.bar-label {
+  position: absolute;
+  bottom: -20px;
+  font-size: .68rem;
+  color: #94a3b8;
+  text-align: center;
+  width: 22px;
+}
+
+/* Horizontal bar chart (teams, rosters) */
+.hbar-chart { display: flex; flex-direction: column; gap: 10px; }
+
+.hbar-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 48px;
+  align-items: center;
+  gap: 10px;
+  font-size: .84rem;
+}
+
+.hbar-label {
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+  height: 14px;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  height: 100%;
+  background: #3b82f6;
+  border-radius: 4px;
+  transition: width .3s ease;
+}
+
+.hbar-fill--alt { background: #8b5cf6; }
+
+.hbar-value {
+  text-align: right;
+  color: #64748b;
+  font-size: .82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Two-column layout for bottom charts */
+.stats-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 0; /* chart-section already has margin-top */
+}
+
+@media (max-width: 860px) {
+  .stats-two-col { grid-template-columns: 1fr; }
+}
+
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 
 .modal-backdrop {
