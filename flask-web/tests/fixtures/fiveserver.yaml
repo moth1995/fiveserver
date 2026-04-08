@@ -1,0 +1,58 @@
+Name: Fiveserver Test Fixture
+Version: 1.8
+ServerIP: auto
+ListenOn: ''
+IpDetectUri: http://mapote.com/cgi-bin/ip.py
+Lobbies:
+- TestLobby
+GamePorts:
+    pes5: 16001
+    we9le: 19501
+    we9: 18001
+NetworkServer:
+    mainService: 20100
+    networkMenuService: 20101
+    loginService:
+        pes5: 20102
+        we9: 20103
+        we9le: 20104
+WebInterface:
+    port: 8180
+Debug: false
+DB:
+    name: fiveserver_test
+    user: test
+    password: test
+    readServers:
+    - 127.0.0.1
+    writeServers:
+    - 127.0.0.1
+    sharePool: true
+    ConnectionPool:
+        minConnections: 1
+        maxConnections: 2
+        keepAliveInterval: 60
+BannedList: ''
+Chat:
+    bannedWords: []
+    warningMessage: banned
+Roster:
+    enforceHash: false
+    compareHash: false
+ComputeRanksInterval:
+    days: 1
+    seconds: 0
+StoreSettings: false
+ShowStats: false
+MaxUsers: 500
+Disconnects:
+    CountAsLoss:
+        Enabled: false
+        Score:
+            player: 0
+            opponent: 3
+ServerName: Fiveserver
+Greeting:
+    text: ''
+AdminUser: fives
+AdminPassword: fives

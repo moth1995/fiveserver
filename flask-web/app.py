@@ -10,8 +10,15 @@ from config import load_config, make_fast_banned_list
 from db import teardown_db
 
 
-def create_app() -> Flask:
-    """Create and configure the Flask application."""
+def create_app(
+    config_path: str | None = None,
+    admin_config_path: str | None = None,
+) -> Flask:
+    """Create and configure the Flask application.
+
+    config_path and admin_config_path default to the repo's etc/conf/ files.
+    Pass explicit paths in tests to avoid touching the real config.
+    """
     app = Flask(__name__)
 
     # ------------------------------------------------------------------
@@ -19,8 +26,8 @@ def create_app() -> Flask:
     # ------------------------------------------------------------------
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cfg = load_config(
-        os.path.join(repo_root, 'etc', 'conf', 'fiveserver.yaml'),
-        os.path.join(repo_root, 'etc', 'conf', 'admin.yaml'),
+        config_path or os.path.join(repo_root, 'etc', 'conf', 'fiveserver.yaml'),
+        admin_config_path or os.path.join(repo_root, 'etc', 'conf', 'admin.yaml'),
     )
     app.config['FS_CONFIG'] = cfg
     app.config['ADMIN_USER'] = os.environ.get('ADMIN_USER', cfg.get('AdminUser', 'fives'))

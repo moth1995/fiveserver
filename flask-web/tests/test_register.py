@@ -1,14 +1,10 @@
 """Tests for the registration blueprint."""
 from __future__ import annotations
 
-import sys
-import os
 import unittest
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from app import create_app
+from helpers import create_test_app
 
 
 def _mock_db(find_by_username=None, find_by_nonce=None, create_user_id=1):  # type: ignore[return]
@@ -27,8 +23,7 @@ def _mock_db(find_by_username=None, find_by_nonce=None, create_user_id=1):  # ty
 class TestRegisterForm(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_get_form_returns_200(self) -> None:
@@ -58,8 +53,7 @@ class TestRegisterForm(unittest.TestCase):
 class TestRegisterPost(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
         # 32-char hex string (valid MD5)
         self.valid_hash = '098f6bcd4621d373cade4e832627b4f6'
