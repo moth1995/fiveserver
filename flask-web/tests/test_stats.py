@@ -1,26 +1,19 @@
 from __future__ import annotations
 
 import base64
-import sys
-import os
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from app import create_app
+from helpers import create_test_app
 
 
-def _auth_header(user: str = 'admin', pw: str = 'secret') -> dict[str, str]:
+def _auth_header(user: str = 'fives', pw: str = 'fives') -> dict[str, str]:
     token = base64.b64encode(f'{user}:{pw}'.encode()).decode()
     return {'Authorization': f'Basic {token}'}
 
 
 class TestStatsAuth(unittest.TestCase):
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
-        self.app.config['ADMIN_USER'] = 'admin'
-        self.app.config['ADMIN_PASSWORD'] = 'secret'
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_no_auth_returns_401(self) -> None:
@@ -39,10 +32,7 @@ class TestStatsAuth(unittest.TestCase):
 
 class TestStatsHome(unittest.TestCase):
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
-        self.app.config['ADMIN_USER'] = 'admin'
-        self.app.config['ADMIN_PASSWORD'] = 'secret'
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_home_200(self) -> None:

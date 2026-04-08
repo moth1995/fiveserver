@@ -2,14 +2,10 @@
 from __future__ import annotations
 
 import base64
-import sys
-import os
 import unittest
 from unittest.mock import patch, MagicMock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from app import create_app
+from helpers import create_test_app
 
 
 def _auth_header(username: str = 'fives', password: str = 'fives') -> dict[str, str]:
@@ -34,8 +30,7 @@ def _mock_db_patch(browse_users_result=None, find_user=None):
 class TestAdminAuth(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_no_auth_returns_401(self) -> None:
@@ -57,8 +52,7 @@ class TestAdminAuth(unittest.TestCase):
 class TestAdminUsers(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_users_list_200(self) -> None:
@@ -87,8 +81,7 @@ class TestAdminUsers(unittest.TestCase):
 class TestAdminUserLock(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_userlock_get_returns_200(self) -> None:
@@ -118,8 +111,7 @@ class TestAdminUserLock(unittest.TestCase):
 class TestAdminSettings(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_settings_get_200(self) -> None:
@@ -136,8 +128,7 @@ class TestAdminSettings(unittest.TestCase):
 class TestAdminLog(unittest.TestCase):
 
     def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
+        self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_log_get_200(self) -> None:
