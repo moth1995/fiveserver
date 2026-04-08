@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
 import random
+import urllib.request
 from typing import Any
 
 from db import (
@@ -71,18 +73,47 @@ def check_auth() -> Response | None:
 
 def _get_online_users() -> list[dict[str, Any]]:
     """Call Go server's internal API. Returns [] on any error."""
-    # try:
-    #     with urllib.request.urlopen(
-    #             'http://127.0.0.1:8199/internal/online-users', timeout=1) as resp:
-    #         data: dict[str, Any] = json.loads(resp.read())
-    #         return data.get('users', [])
-    # except Exception:
-    #     return []
-    # Mock data for testing without Go server:
-    return [
-        {"username": "alice", "profile": "Alice#1234", "lobby": "Main"},
-        {"username": "bob", "profile": "Bob#5678", "lobby": "Main"},
-    ]
+    try:
+        with urllib.request.urlopen(
+                'http://127.0.0.1:8199/internal/online-users', timeout=1) as resp:
+            data: dict[str, Any] = json.loads(resp.read())
+            return data.get('users', [])
+    except Exception:
+        return []
+
+
+def _get_lobby_stats() -> dict[str, Any]:
+    """Call Go server's /internal/lobby-stats. Returns {} on any error.
+
+    Expected response shape:
+    {
+      "lobbies": [
+        {
+          "name": "Russia",
+          "player_count": 3,
+          "matches": [
+            {
+              "room_name": "Room1",
+              "match_time": 45,
+              "score": "1:0",
+              "home_team_id": 12,
+              "away_team_id": 34,
+              "home_profile": "PlayerA",
+              "away_profile": "PlayerB"
+            }
+          ]
+        }
+      ]
+    }
+    """
+    try:
+        with urllib.request.urlopen(
+                'http://127.0.0.1:8199/internal/lobby-stats', timeout=1) as resp:
+            data: dict[str, Any] = json.loads(resp.read())
+            # Index by lobby name for O(1) lookup in the template
+            return {lb['name']: lb for lb in data.get('lobbies', [])}
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -126,8 +157,9 @@ def home() -> str:
 
     total, _ = browse_users(conn, offset=0, limit=1)
     online_users = _get_online_users()
+    lobby_stats = _get_lobby_stats()  # keyed by lobby name
 
-    # Count players per lobby name from online users
+    # Count players per lobby name from online users (fallback when Go API unavailable)
     lobby_players: dict[str, int] = {}
     for u in online_users:
         lobby_name: str = u.get("lobby", "")
@@ -139,6 +171,7 @@ def home() -> str:
         online_users=online_users,
         lobbies=lobbies_display,
         lobby_players=lobby_players,
+        lobby_stats=lobby_stats,
         lobby_saved=lobby_saved,
         edit_mode=edit_mode,
     )
