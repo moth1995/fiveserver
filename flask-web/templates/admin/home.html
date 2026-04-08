@@ -82,7 +82,9 @@
     <td style="text-align:center;">
       {% if lb.show_matches and matches %}
       <button class="btn btn-secondary btn-sm"
-              onclick="openMatches({{ matches | tojson }}, {{ lb.name | tojson }})">
+              data-matches='{{ matches | tojson }}'
+              data-lobby='{{ lb.name }}'
+              onclick="openMatches(this)">
         {{ matches | length }} match{{ 'es' if matches | length != 1 else '' }}
       </button>
       {% else %}
@@ -109,7 +111,9 @@
 </div>
 
 <script>
-function openMatches(matches, lobbyName) {
+function openMatches(btn) {
+  var matches = JSON.parse(btn.dataset.matches);
+  var lobbyName = btn.dataset.lobby;
   document.getElementById('modalTitle').textContent = lobbyName + ' — Matches';
   var body = document.getElementById('modalBody');
   if (!matches.length) {
