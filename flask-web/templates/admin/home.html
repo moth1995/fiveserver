@@ -57,10 +57,13 @@
       <th style="text-align:center;">Show Matches</th>
       <th style="text-align:center;">Roster Check</th>
       <th style="text-align:center;">Players</th>
+      <th style="text-align:center;">Matches</th>
     </tr>
   </thead>
   <tbody>
   {% for lb in lobbies %}
+  {% set stats = lobby_stats.get(lb.name, {}) %}
+  {% set matches = stats.get('matches', []) %}
   <tr>
     <td>{{ lb.name }}</td>
     <td>
@@ -75,14 +78,66 @@
     </td>
     <td style="text-align:center;">{% if lb.show_matches %}&#10003;{% else %}&#10007;{% endif %}</td>
     <td style="text-align:center;">{% if lb.check_roster_hash %}&#10003;{% else %}&#10007;{% endif %}</td>
-    <td style="text-align:center;">{{ lobby_players.get(lb.name, 0) }}</td>
+    <td style="text-align:center;">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
+    <td style="text-align:center;">
+      {% if lb.show_matches and matches %}
+      <button class="btn btn-secondary btn-sm"
+              onclick="openMatches({{ matches | tojson }}, {{ lb.name | tojson }})">
+        {{ matches | length }} match{{ 'es' if matches | length != 1 else '' }}
+      </button>
+      {% else %}
+      <span style="color:#94a3b8;">—</span>
+      {% endif %}
+    </td>
   </tr>
   {% else %}
-  <tr><td colspan="5" style="color:#64748b;">No lobbies configured.</td></tr>
+  <tr><td colspan="6" style="color:#64748b;">No lobbies configured.</td></tr>
   {% endfor %}
   </tbody>
 </table>
 </div>
+
+{# ---- Matches modal ---- #}
+<div class="modal-backdrop" id="matchModal" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Matches</h3>
+      <button class="modal-close" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+function openMatches(matches, lobbyName) {
+  document.getElementById('modalTitle').textContent = lobbyName + ' — Matches';
+  var body = document.getElementById('modalBody');
+  if (!matches.length) {
+    body.innerHTML = '<p style="color:#64748b;">No matches in progress.</p>';
+  } else {
+    body.innerHTML = matches.map(function(m) {
+      return '<div class="match-card">' +
+        '<div class="score">' + (m.score || '0:0') + '</div>' +
+        '<div class="profiles">' +
+          '<span>' + (m.home_profile || 'Unknown') + '</span>' +
+          '<span>' + (m.away_profile || 'Unknown') + '</span>' +
+        '</div>' +
+        '<div class="meta">' +
+          'Room: ' + (m.room_name || '—') +
+          (m.match_time !== undefined ? ' &nbsp;·&nbsp; ' + m.match_time + '\'' : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  document.getElementById('matchModal').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('matchModal').classList.remove('open');
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeModal();
+});
+</script>
 
 {% else %}
 {# ---- Edit mode ---- #}
@@ -103,6 +158,7 @@
     </thead>
     <tbody>
     {% for lb in lobbies %}
+    {% set stats = lobby_stats.get(lb.name, {}) %}
     <tr>
       <td><input type="text" name="lobby_name_{{ loop.index0 }}" value="{{ lb.name }}" style="width:130px;"></td>
       <td>
@@ -124,7 +180,7 @@
         <input type="checkbox" name="lobby_roster_{{ loop.index0 }}" value="1"
                {% if lb.check_roster_hash %}checked{% endif %}>
       </td>
-      <td style="text-align:center;">{{ lobby_players.get(lb.name, 0) }}</td>
+      <td style="text-align:center;">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
       <td>
         <button class="btn btn-danger btn-sm" type="submit"
                 name="action" value="lobby_remove_{{ loop.index0 }}"
