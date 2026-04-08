@@ -1,53 +1,104 @@
 {% extends "admin/layout.html" %}
-{% block title %}Stats{% endblock %}
+{% block title %}Metrics — {{ month_label }}{% endblock %}
 {% block body %}
 
-<div class="cards">
+{# ── Filter bar ─────────────────────────────────────────────────────────── #}
+<form class="stats-filters" method="GET" action="/stats">
+  <div class="filter-group">
+    <label>Month</label>
+    <select name="month" onchange="this.form.submit()">
+      {% for opt in month_options %}
+      <option value="{{ opt.value }}" {% if opt.value == selected_month %}selected{% endif %}>
+        {{ opt.label }}
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filter-group">
+    <label>Active Users Range</label>
+    <input type="date" name="from" value="{{ date_from }}">
+    <span style="color:#64748b;">to</span>
+    <input type="date" name="to"   value="{{ date_to }}">
+    <button class="btn btn-secondary btn-sm" type="submit">Apply</button>
+  </div>
+</form>
+
+{# ── Summary cards ───────────────────────────────────────────────────────── #}
+<div class="cards" style="margin-top:20px;">
   <div class="card">
-    <div class="card-value">{{ online_users | length }}</div>
-    <div class="card-label">Online Now</div>
+    <div class="card-value">{{ summary.total_matches }}</div>
+    <div class="card-label">Matches Played</div>
   </div>
   <div class="card">
-    <div class="card-value">{{ lobbies | length }}</div>
-    <div class="card-label">Active Lobbies</div>
+    <div class="card-value">{{ summary.active_users }}</div>
+    <div class="card-label">Active Users</div>
+  </div>
+  <div class="card">
+    <div class="card-value">{{ summary.new_users }}</div>
+    <div class="card-label">New Registrations</div>
+  </div>
+  <div class="card">
+    <div class="card-value">{{ summary.avg_goals_per_match }}</div>
+    <div class="card-label">Avg Goals / Match</div>
   </div>
 </div>
 
-<h2>Online Players</h2>
-{% if online_users %}
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Username</th><th>Lobby</th><th>Connected Since</th></tr></thead>
-  <tbody>
-  {% for u in online_users %}
-  <tr>
-    <td>{{ u.username }}</td>
-    <td>{{ u.lobby }}</td>
-    <td>{{ u.since }}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+{# ── Matches per day ─────────────────────────────────────────────────────── #}
+<div class="chart-section">
+  <h2>Matches Per Day — {{ month_label }}</h2>
+  <div class="bar-chart-wrap">
+    <div class="bar-chart">
+      {% for d in matches_per_day %}
+      <div class="bar-col">
+        <div class="bar-tooltip">{{ d.count }}</div>
+        <div class="bar" style="height:{{ ((d.count / max_daily) * 100) | round(1) }}%"></div>
+        <div class="bar-label">{{ d.day }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
 </div>
-{% else %}
-<p style="color:#64748b;">No players currently online.</p>
-{% endif %}
 
-{% if lobbies %}
-<h2 style="margin-top:28px;">Lobbies</h2>
-<div class="table-wrap">
-<table>
-  <thead><tr><th>Name</th><th>Players</th></tr></thead>
-  <tbody>
-  {% for lobby in lobbies %}
-  <tr>
-    <td>{% if lobby is mapping %}{{ lobby.name }}{% else %}{{ lobby }}{% endif %}</td>
-    <td>{% if lobby is mapping %}{{ lobby.players | default(0) }}{% else %}—{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+{# ── Bottom two-column section ───────────────────────────────────────────── #}
+<div class="stats-two-col">
+
+  {# Top Teams #}
+  <div class="chart-section">
+    <h2>Most Used Teams</h2>
+    {% set team_max = top_teams[0].count if top_teams else 1 %}
+    <div class="hbar-chart">
+      {% for t in top_teams %}
+      <div class="hbar-row">
+        <div class="hbar-label">{{ t.name or ('Team ' ~ t.team_id) }}</div>
+        <div class="hbar-track">
+          <div class="hbar-fill" style="width:{{ ((t.count / team_max) * 100) | round(1) }}%"></div>
+        </div>
+        <div class="hbar-value">{{ t.count }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# Top Roster Hashes #}
+  <div class="chart-section">
+    <h2>Top Roster Hashes</h2>
+    {% set roster_max = top_rosters[0].count if top_rosters else 1 %}
+    <div class="hbar-chart">
+      {% for r in top_rosters %}
+      <div class="hbar-row">
+        <div class="hbar-label" style="font-family:monospace;font-size:.78rem;">
+          {{ r.hash[:16] }}…
+        </div>
+        <div class="hbar-track">
+          <div class="hbar-fill hbar-fill--alt" style="width:{{ ((r.count / roster_max) * 100) | round(1) }}%"></div>
+        </div>
+        <div class="hbar-value">{{ r.count }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
 </div>
-{% endif %}
 
 {% endblock %}

@@ -4,7 +4,6 @@ import base64
 import sys
 import os
 import unittest
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -34,8 +33,7 @@ class TestStatsAuth(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_correct_auth_passes(self) -> None:
-        with patch('blueprints.stats._get_online_users', return_value=[]):
-            resp = self.client.get('/stats/', headers=_auth_header())
+        resp = self.client.get('/stats/', headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
 
 
@@ -47,45 +45,39 @@ class TestStatsHome(unittest.TestCase):
         self.app.config['ADMIN_PASSWORD'] = 'secret'
         self.client = self.app.test_client()
 
-    def test_home_200_no_online(self) -> None:
-        with patch('blueprints.stats._get_online_users', return_value=[]):
-            resp = self.client.get('/stats/', headers=_auth_header())
+    def test_home_200(self) -> None:
+        resp = self.client.get('/stats/', headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'Online', resp.data)
 
-    def test_home_shows_online_users(self) -> None:
-        fake_users = [{'username': 'player1', 'lobby': 'Lobby A', 'since': '10:00'}]
-        with patch('blueprints.stats._get_online_users', return_value=fake_users):
-            resp = self.client.get('/stats/home', headers=_auth_header())
+    def test_home_shows_summary_cards(self) -> None:
+        resp = self.client.get('/stats/', headers=_auth_header())
+        self.assertIn(b'Matches Played', resp.data)
+        self.assertIn(b'Active Users', resp.data)
+        self.assertIn(b'New Registrations', resp.data)
+
+    def test_home_shows_charts(self) -> None:
+        resp = self.client.get('/stats/', headers=_auth_header())
+        self.assertIn(b'Matches Per Day', resp.data)
+        self.assertIn(b'Most Used Teams', resp.data)
+        self.assertIn(b'Top Roster Hashes', resp.data)
+
+    def test_month_filter(self) -> None:
+        resp = self.client.get('/stats/?month=2026-01', headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'player1', resp.data)
+        self.assertIn(b'January 2026', resp.data)
 
-
-class TestStatsUsers(unittest.TestCase):
-    def setUp(self) -> None:
-        self.app = create_app()
-        self.app.config['TESTING'] = True
-        self.app.config['ADMIN_USER'] = 'admin'
-        self.app.config['ADMIN_PASSWORD'] = 'secret'
-        self.client = self.app.test_client()
-
-    def test_users_200(self) -> None:
-        fake_users = [{'id': 1, 'username': 'tester', 'rank': 5,
-                       'points': 100, 'seconds_played': 7200}]
-        with patch('blueprints.stats.get_db') as mock_get_db, \
-             patch('blueprints.stats.browse_users', return_value=(1, fake_users)):
-            mock_get_db.return_value = MagicMock()
-            resp = self.client.get('/stats/users', headers=_auth_header())
+    def test_date_range_filter(self) -> None:
+        resp = self.client.get(
+            '/stats/?from=2026-04-01&to=2026-04-07', headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'tester', resp.data)
 
-    def test_users_empty(self) -> None:
-        with patch('blueprints.stats.get_db') as mock_get_db, \
-             patch('blueprints.stats.browse_users', return_value=(0, [])):
-            mock_get_db.return_value = MagicMock()
-            resp = self.client.get('/stats/users', headers=_auth_header())
+    def test_home_alias(self) -> None:
+        resp = self.client.get('/stats/home', headers=_auth_header())
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b'No users found', resp.data)
+
+    def test_invalid_month_falls_back(self) -> None:
+        resp = self.client.get('/stats/?month=bad', headers=_auth_header())
+        self.assertEqual(resp.status_code, 200)
 
 
 if __name__ == '__main__':
