@@ -71,11 +71,17 @@ def check_auth() -> Response | None:
 # ---------------------------------------------------------------------------
 
 
+def _go_api_base() -> str:
+    host = os.environ.get('GO_API_HOST', '127.0.0.1')
+    port = os.environ.get('GO_API_PORT', '8199')
+    return f'http://{host}:{port}'
+
+
 def _get_online_users() -> list[dict[str, Any]]:
-    """Call Go server's internal API. Returns [] on any error."""
+    """Call Go server's API. Returns [] on any error."""
     try:
         with urllib.request.urlopen(
-                'http://127.0.0.1:8199/internal/online-users', timeout=1) as resp:
+                f'{_go_api_base()}/online-users', timeout=1) as resp:
             data: dict[str, Any] = json.loads(resp.read())
             return data.get('users', [])
     except Exception:
@@ -83,32 +89,10 @@ def _get_online_users() -> list[dict[str, Any]]:
 
 
 def _get_lobby_stats() -> dict[str, Any]:
-    """Call Go server's /internal/lobby-stats. Returns {} on any error.
-
-    Expected response shape:
-    {
-      "lobbies": [
-        {
-          "name": "Russia",
-          "player_count": 3,
-          "matches": [
-            {
-              "room_name": "Room1",
-              "match_time": 45,
-              "score": "1:0",
-              "home_team_id": 12,
-              "away_team_id": 34,
-              "home_profile": "PlayerA",
-              "away_profile": "PlayerB"
-            }
-          ]
-        }
-      ]
-    }
-    """
+    """Call Go server's /lobby-stats. Returns {} on any error."""
     try:
         with urllib.request.urlopen(
-                'http://127.0.0.1:8199/internal/lobby-stats', timeout=1) as resp:
+                f'{_go_api_base()}/lobby-stats', timeout=1) as resp:
             data: dict[str, Any] = json.loads(resp.read())
             # Index by lobby name for O(1) lookup in the template
             return {lb['name']: lb for lb in data.get('lobbies', [])}
