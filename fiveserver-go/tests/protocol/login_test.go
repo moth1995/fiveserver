@@ -282,6 +282,7 @@ func TestDisconnect_RemovesSession(t *testing.T) {
 		User:    &model.User{Hash: "user-dc"},
 		Profile: &model.Profile{ID: 1, Name: "DCPlayer"},
 	}
+	hub.UserOnline(s)
 	hub.AddSession(s)
 
 	if hub.OnlineCount() != 1 {
