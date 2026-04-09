@@ -19,12 +19,14 @@ type ConnSender struct {
 	SendDataFn  func(id uint16, data []byte) error
 	SendZerosFn func(id uint16, length int) error
 	SendFn      func(pkt Packet) error
+	CloseFn     func()
 	RemoteAddr  string
 }
 
 func (c *ConnSender) SendData(id uint16, data []byte) error { return c.SendDataFn(id, data) }
 func (c *ConnSender) SendZeros(id uint16, length int) error { return c.SendZerosFn(id, length) }
 func (c *ConnSender) Send(pkt Packet) error                 { return c.SendFn(pkt) }
+func (c *ConnSender) Close()                                { c.CloseFn() }
 
 // HandlerFunc handles one packet on a connection.
 type HandlerFunc func(s *Session, pkt Packet) error

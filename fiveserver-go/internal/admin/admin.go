@@ -23,6 +23,8 @@ func NewServer(hub *protocol.Hub) *Server {
 func (srv *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/chat", srv.handleBroadcast)
+	mux.HandleFunc("GET /api/users", srv.handleUsers)
+	mux.HandleFunc("POST /api/kick", srv.handleKick)
 	log.Printf("[admin] HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
@@ -72,4 +74,66 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[admin] broadcast %q to %d lobby/lobbies", req.Message, sent)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{"lobbies": sent})
+}
+
+// handleUsers handles GET /api/users — returns all online sessions.
+func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
+	type userEntry struct {
+		Profile     string `json:"profile"`
+		Username    string `json:"username"`
+		Lobby       string `json:"lobby"`
+		Addr        string `json:"addr"`
+		GameVersion string `json:"game_version"`
+	}
+
+	sessions := srv.hub.Sessions()
+	out := make([]userEntry, 0, len(sessions))
+	for _, s := range sessions {
+		if s.User == nil || s.User.Profile == nil {
+			continue
+		}
+		lobby := ""
+		if l, ok := srv.hub.GetLobby(s.User.LobbyIndex); ok {
+			lobby = l.Name
+		}
+		out = append(out, userEntry{
+			Profile:     s.User.Profile.Name,
+			Username:    s.User.User.Username,
+			Lobby:       lobby,
+			Addr:        s.Conn.RemoteAddr,
+			GameVersion: s.GameVersion,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(out)
+}
+
+// handleKick handles POST /api/kick — closes the connection for a named profile.
+//
+//	{"profile": "PlayerName"}
+func (srv *Server) handleKick(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Profile string `json:"profile"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.Profile == "" {
+		http.Error(w, "profile is required", http.StatusBadRequest)
+		return
+	}
+
+	s, ok := srv.hub.GetSession(req.Profile)
+	if !ok {
+		http.Error(w, fmt.Sprintf("profile %q not online", req.Profile), http.StatusNotFound)
+		return
+	}
+
+	log.Printf("[admin] kicking %s (addr=%s)", req.Profile, s.Conn.RemoteAddr)
+	s.Conn.Close()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile})
 }
