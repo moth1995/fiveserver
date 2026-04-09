@@ -345,6 +345,9 @@ func handleMenuDisconnect(hub *Hub) HandlerFunc {
 		if s.User != nil && s.User.Profile != nil {
 			log.Printf("[menu] User {%s} exiting lobby %d (disconnect)", s.User.Profile.Name, s.User.LobbyIndex+1)
 		}
+		// Clear OnClose so the serveConn defer does not run cleanup a second time
+		// after this graceful 0x0003 handler already did it.
+		s.OnClose = nil
 		exitLobbyAndNotify(hub, s)
 		if s.User != nil {
 			hub.RemoveSession(s)
