@@ -99,11 +99,6 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bo
 // serveConn builds a Session+ConnSender for one accepted connection and runs
 // the packet read loop, dispatching every packet through d.
 func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool) {
-	defer func() {
-		log.Printf("[tcp] connection closed: %s", conn.RemoteAddr)
-		conn.Close()
-	}()
-
 	// ConnSender shim: bridges server.Conn to protocol.Session without an
 	// import cycle (protocol cannot import server).
 	cs := &protocol.ConnSender{
@@ -117,6 +112,14 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool) {
 		Conn:       cs,
 		Dispatcher: d,
 	}
+
+	defer func() {
+		log.Printf("[tcp] connection closed: %s", conn.RemoteAddr)
+		conn.Close()
+		if s.OnClose != nil {
+			s.OnClose()
+		}
+	}()
 
 	// In debug mode, wrap SendDataFn to also log the hex dump.
 	// Captures s so the username is available after authentication.

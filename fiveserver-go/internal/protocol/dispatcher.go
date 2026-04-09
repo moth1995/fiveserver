@@ -68,6 +68,7 @@ type Session struct {
 	Dispatcher  *Dispatcher
 	Hub         *Hub
 	GameVersion string // "pes5", "we9", "we9le"
+	OnClose     func() // called by server layer when the connection closes (may be nil)
 }
 
 // ---- Hub --------------------------------------------------------------------
