@@ -110,6 +110,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool) {
 		SendDataFn:  conn.SendData,
 		SendZerosFn: conn.SendZeros,
 		SendFn:      conn.Send,
+		CloseFn:     func() { conn.Close() },
 		RemoteAddr:  conn.RemoteAddr,
 	}
 	s := &protocol.Session{
