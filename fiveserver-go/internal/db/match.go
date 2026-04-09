@@ -12,6 +12,9 @@ import (
 // winning streaks, exactly as Python MatchData._storeTxn does.
 // Returns the new match ID.
 func RecordMatch(ctx context.Context, sc *StorageController, m *model.Match) (int, error) {
+	if sc == nil {
+		return 0, ErrNoDB
+	}
 	tx, err := sc.Write.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return 0, fmt.Errorf("db/match: begin tx: %w", err)
@@ -99,6 +102,9 @@ type MatchRow struct {
 // normalised as "requesting player always home". Mirrors the UNION ALL query
 // introduced in feature/pes5-last-10-matches (commit 10c5ff6).
 func GetMatchesByProfileID(ctx context.Context, sc *StorageController, profileID, limit int) ([]*MatchRow, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `
 SELECT opponent_profile_id, my_score, opp_score, my_team_id, opp_team_id, played_on
 FROM (
@@ -146,6 +152,9 @@ ORDER BY t.id DESC LIMIT ?`
 
 // GetStreakByProfileID returns the current win streak and all-time best for a profile.
 func GetStreakByProfileID(ctx context.Context, sc *StorageController, profileID int) (wins, best int, err error) {
+	if sc == nil {
+		return 0, 0, ErrNoDB
+	}
 	row := sc.Read.DB().QueryRowContext(ctx,
 		`SELECT wins, best FROM streaks WHERE profile_id=?`, profileID)
 	if scanErr := row.Scan(&wins, &best); scanErr != nil {
@@ -158,6 +167,9 @@ func GetStreakByProfileID(ctx context.Context, sc *StorageController, profileID 
 // GetStatsByProfileID returns aggregated match statistics for a profile.
 // Mirrors Python ProfileLogic.getStats which queries wins/losses/draws/goals/streaks.
 func GetStatsByProfileID(ctx context.Context, sc *StorageController, profileID int) (*model.Stats, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `
 SELECT
   SUM(CASE WHEN (profile_id_home=? AND score_home>score_away) OR (profile_id_away=? AND score_home<score_away) THEN 1 ELSE 0 END),
@@ -186,6 +198,9 @@ WHERE profile_id_home=? OR profile_id_away=?`
 
 // UpdateStreak explicitly sets the streak for a profile (used by admin / correction flows).
 func UpdateStreak(ctx context.Context, sc *StorageController, profileID, wins, best int) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `INSERT INTO streaks (profile_id, wins, best) VALUES (?, ?, ?)
 	      ON DUPLICATE KEY UPDATE wins=VALUES(wins), best=VALUES(best)`
 	if _, err := sc.Write.DB().ExecContext(ctx, q, profileID, wins, best); err != nil {

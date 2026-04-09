@@ -12,6 +12,9 @@ import (
 // ErrNotFound is returned when a query finds no rows.
 var ErrNotFound = errors.New("db: not found")
 
+// ErrNoDB is returned when a nil *StorageController is passed to a DB function.
+var ErrNoDB = errors.New("db: no storage controller")
+
 const userSelectCols = `id, username, serial, hash, COALESCE(reset_nonce,''), deleted`
 
 func scanUser(row *sql.Row) (*model.User, error) {
@@ -41,24 +44,36 @@ func scanUserRows(rows *sql.Rows) ([]*model.User, error) {
 
 // GetUserByID fetches a non-deleted user by primary key.
 func GetUserByID(ctx context.Context, sc *StorageController, id int) (*model.User, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + userSelectCols + ` FROM users WHERE deleted=0 AND id=?`
 	return scanUser(sc.Read.DB().QueryRowContext(ctx, q, id))
 }
 
 // GetUserByUsername fetches a non-deleted user by username.
 func GetUserByUsername(ctx context.Context, sc *StorageController, username string) (*model.User, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + userSelectCols + ` FROM users WHERE deleted=0 AND username=?`
 	return scanUser(sc.Read.DB().QueryRowContext(ctx, q, username))
 }
 
 // GetUserByHash fetches a non-deleted user by hash (used for authentication).
 func GetUserByHash(ctx context.Context, sc *StorageController, hash string) (*model.User, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + userSelectCols + ` FROM users WHERE deleted=0 AND hash=?`
 	return scanUser(sc.Read.DB().QueryRowContext(ctx, q, hash))
 }
 
 // GetUserByNonce fetches a non-deleted user by reset_nonce (password reset flow).
 func GetUserByNonce(ctx context.Context, sc *StorageController, nonce string) (*model.User, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + userSelectCols + ` FROM users WHERE deleted=0 AND reset_nonce=?`
 	return scanUser(sc.Read.DB().QueryRowContext(ctx, q, nonce))
 }
@@ -66,6 +81,9 @@ func GetUserByNonce(ctx context.Context, sc *StorageController, nonce string) (*
 // CreateUser inserts a new user or updates an existing one (upsert).
 // Mirrors Python UserData.store(). Returns the row ID.
 func CreateUser(ctx context.Context, sc *StorageController, username, serial, hash string) (int, error) {
+	if sc == nil {
+		return 0, ErrNoDB
+	}
 	q := `INSERT INTO users (username, serial, hash)
 	      VALUES (?, ?, ?)
 	      ON DUPLICATE KEY UPDATE deleted=0, username=VALUES(username), serial=VALUES(serial), hash=VALUES(hash)`
@@ -82,6 +100,9 @@ func CreateUser(ctx context.Context, sc *StorageController, username, serial, ha
 
 // UpdateUserHash updates the password hash for a user.
 func UpdateUserHash(ctx context.Context, sc *StorageController, id int, hash string) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `UPDATE users SET hash=? WHERE id=?`
 	if _, err := sc.Write.DB().ExecContext(ctx, q, hash, id); err != nil {
 		return fmt.Errorf("db/user: update hash: %w", err)
@@ -91,6 +112,9 @@ func UpdateUserHash(ctx context.Context, sc *StorageController, id int, hash str
 
 // SetResetNonce sets (or clears when nonce=="") the reset_nonce for a user.
 func SetResetNonce(ctx context.Context, sc *StorageController, id int, nonce string) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	var q string
 	var args []interface{}
 	if nonce == "" {
@@ -108,6 +132,9 @@ func SetResetNonce(ctx context.Context, sc *StorageController, id int, nonce str
 
 // DeleteUser soft-deletes a user (sets deleted=1).
 func DeleteUser(ctx context.Context, sc *StorageController, id int) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `UPDATE users SET deleted=1 WHERE id=?`
 	if _, err := sc.Write.DB().ExecContext(ctx, q, id); err != nil {
 		return fmt.Errorf("db/user: delete: %w", err)
