@@ -215,6 +215,20 @@ func (h *Hub) AtCapacity() bool {
 	return h.OnlineCount() >= h.cfg.MaxUsers
 }
 
+// KickSession removes a session from the hub immediately and closes its TCP
+// connection. Removing from the hub first ensures the "already online" guard
+// clears even if the OnClose hook fires after the reconnect attempt.
+func (h *Hub) KickSession(s *Session) {
+	h.mu.Lock()
+	if s.User != nil && s.User.Profile != nil {
+		if current, ok := h.users[s.User.Profile.Name]; ok && current == s {
+			delete(h.users, s.User.Profile.Name)
+		}
+	}
+	h.mu.Unlock()
+	s.Conn.Close()
+}
+
 // Sessions returns a snapshot of all online sessions. Safe to iterate without
 // holding the lock.
 func (h *Hub) Sessions() []*Session {
