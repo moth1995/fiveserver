@@ -52,6 +52,7 @@ func main() {
 
 	// ---- 4. Shared Hub ---------------------------------------------------------
 	hub := protocol.NewHub(cfg)
+	protocol.StartDayChangeTimer(hub)
 
 	// ---- 5. Listeners ----------------------------------------------------------
 	var wg sync.WaitGroup

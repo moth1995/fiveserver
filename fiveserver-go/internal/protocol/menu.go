@@ -359,6 +359,44 @@ func FilterChat(msg string, bannedWords []string, warning string) string {
 	return msg
 }
 
+// ---- broadcastSystemChat ----------------------------------------------------
+
+// broadcastSystemChat sends a server-generated chat message to every player in
+// the lobby and adds it to the chat history.
+// Matches Python NetworkMenuService.broadcastSystemChat exactly.
+func broadcastSystemChat(hub *Hub, lobby *model.Lobby, text string) {
+	msg := model.NewChatMessage(model.SystemProfile, text)
+	data := buildChatPacket([]byte{0}, []byte{0, 0, 0, 0}, model.SystemProfile, text)
+	for _, u := range lobby.Players() {
+		sendToUser(hub, u, 0x4402, data)
+	}
+	lobby.AddChatMessage(msg)
+}
+
+// StartDayChangeTimer fires broadcastSystemChat + PurgeOldChat for every lobby
+// at startup and then once per day at midnight — matching Python systemDayChange.
+func StartDayChangeTimer(hub *Hub) {
+	var tick func()
+	tick = func() {
+		now := time.Now()
+		message := "Date: " + now.Format("Mon Jan  2 15:04:05 2006") + " " + now.Format("MST")
+		for _, lobby := range hub.Lobbies() {
+			if len(lobby.Players()) == 0 {
+				// no connection to broadcast through — just add to history
+				lobby.AddChatMessage(model.NewChatMessage(model.SystemProfile, message))
+			} else {
+				broadcastSystemChat(hub, lobby, message)
+			}
+			lobby.PurgeOldChat()
+		}
+		// schedule next run at next midnight + 1 second (mirrors Python td.seconds+1)
+		midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 1, 0, now.Location())
+		time.AfterFunc(time.Until(midnight), tick)
+	}
+	// run immediately on startup (mirrors Python reactor.callLater(0, self.systemDayChange))
+	go tick()
+}
+
 // ---- chat helpers -----------------------------------------------------------
 
 // sendChatHistory replays lobby chat history to a newly joined user.
