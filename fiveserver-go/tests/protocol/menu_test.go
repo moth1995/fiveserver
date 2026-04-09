@@ -455,6 +455,7 @@ func TestMenuDisconnect_RemovesFromHubAndLobby(t *testing.T) {
 	s, _ := sessionWithProfile(hub, 5, "Disconnect5")
 
 	// Add to hub and lobby
+	hub.UserOnline(s)
 	hub.AddSession(s)
 	lobby, _ := hub.GetLobby(0)
 	s.User.LobbyIndex = 0

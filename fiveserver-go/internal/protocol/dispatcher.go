@@ -83,19 +83,27 @@ type MatchState struct {
 
 // Hub holds server-wide shared state: online sessions, configuration, and lobbies.
 // All exported methods are thread-safe.
+//
+// Two separate maps mirror the Python architecture:
+//   byHash    — keyed by user.Hash, populated at 0x3003 authentication.
+//               Used for the "already online" check (matches Python onlineUsers).
+//   byProfile — keyed by profile.Name, populated at 0x4100 profile selection.
+//               Used for message routing / sendToUser (matches Python lobbyConnection).
 type Hub struct {
-	mu      sync.RWMutex
-	users   map[string]*Session   // key: profile name (set after profile select)
-	matches map[*Session]*MatchState // key: home session
-	cfg     *config.Config
-	lobbies []*model.Lobby // live lobby instances initialised from cfg.Lobbies
+	mu        sync.RWMutex
+	byHash    map[string]*Session      // key: user.Hash  (set at login)
+	byProfile map[string]*Session      // key: profile.Name (set at profile select)
+	matches   map[*Session]*MatchState // key: home session
+	cfg       *config.Config
+	lobbies   []*model.Lobby // live lobby instances initialised from cfg.Lobbies
 }
 
 func NewHub(cfg *config.Config) *Hub {
 	h := &Hub{
-		users:   make(map[string]*Session),
-		matches: make(map[*Session]*MatchState),
-		cfg:     cfg,
+		byHash:    make(map[string]*Session),
+		byProfile: make(map[string]*Session),
+		matches:   make(map[*Session]*MatchState),
+		cfg:       cfg,
 	}
 	for i, lc := range cfg.Lobbies {
 		l := model.NewLobby(lc.Name, cfg.MaxUsers)
@@ -163,27 +171,77 @@ func (h *Hub) ClearPendingMatch(s *Session) {
 // Config returns the server configuration (read-only after startup).
 func (h *Hub) Config() *config.Config { return h.cfg }
 
-// AddSession registers a session by its selected profile name.
-// Call after the user selects a profile (0x3040).
+// ---- online tracking (byHash) -----------------------------------------------
+
+// UserOnline marks a user as online after successful authentication (0x3003).
+// Mirrors Python FiveServerFactory.userOnline(usr).
+func (h *Hub) UserOnline(s *Session) {
+	if s.User == nil {
+		return
+	}
+	h.mu.Lock()
+	h.byHash[s.User.User.Hash] = s
+	h.mu.Unlock()
+	log.Printf("[hub] UserOnline {id=%d} addr=%s", s.User.User.ID, s.Conn.RemoteAddr)
+}
+
+// UserOffline removes a user from both maps.
+// No pointer check on byHash — mirrors Python's try/del which just removes by key.
+// Uses pointer check on byProfile to avoid evicting a newer session.
+// Mirrors Python FiveServerFactory.userOffline(usr).
+func (h *Hub) UserOffline(s *Session) {
+	if s.User == nil {
+		return
+	}
+	name := ""
+	if s.User.Profile != nil {
+		name = s.User.Profile.Name
+	}
+	h.mu.Lock()
+	delete(h.byHash, s.User.User.Hash)
+	if s.User.Profile != nil {
+		if current, ok := h.byProfile[name]; ok && current == s {
+			delete(h.byProfile, name)
+		}
+	}
+	h.mu.Unlock()
+	log.Printf("[hub] UserOffline {%s} addr=%s", name, s.Conn.RemoteAddr)
+}
+
+// IsUserOnline checks whether a user is currently authenticated.
+// O(1) hash lookup — mirrors Python FiveServerFactory.isUserOnline(usr).
+func (h *Hub) IsUserOnline(u *model.User) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	_, ok := h.byHash[u.Hash]
+	return ok
+}
+
+// ---- profile routing (byProfile) --------------------------------------------
+
+// AddSession registers a session by its selected profile name for message routing.
+// Call after the user selects a profile (0x4100).
 func (h *Hub) AddSession(s *Session) {
 	if s.User == nil || s.User.Profile == nil {
 		return
 	}
 	h.mu.Lock()
-	h.users[s.User.Profile.Name] = s
+	h.byProfile[s.User.Profile.Name] = s
 	h.mu.Unlock()
 	log.Printf("[hub] AddSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
 }
 
-// RemoveSession removes a session from the online map.
+// RemoveSession removes a session from the profile routing map.
+// Only removes if the stored pointer matches s (prevents a stale disconnect
+// on one port from evicting a newer session registered on another port).
 func (h *Hub) RemoveSession(s *Session) {
 	if s.User == nil || s.User.Profile == nil {
 		return
 	}
 	h.mu.Lock()
-	current, exists := h.users[s.User.Profile.Name]
+	current, exists := h.byProfile[s.User.Profile.Name]
 	if exists && current == s {
-		delete(h.users, s.User.Profile.Name)
+		delete(h.byProfile, s.User.Profile.Name)
 		h.mu.Unlock()
 		log.Printf("[hub] RemoveSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
 	} else {
@@ -194,19 +252,32 @@ func (h *Hub) RemoveSession(s *Session) {
 	}
 }
 
-// GetSession looks up an online session by profile name.
+// GetSession looks up a session by profile name (for message routing).
 func (h *Hub) GetSession(profileName string) (*Session, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	s, ok := h.users[profileName]
+	s, ok := h.byProfile[profileName]
 	return s, ok
 }
 
-// OnlineCount returns the number of currently authenticated sessions.
+// Sessions returns a snapshot of all sessions that have selected a profile.
+// Safe to iterate without holding the lock.
+func (h *Hub) Sessions() []*Session {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*Session, 0, len(h.byProfile))
+	for _, s := range h.byProfile {
+		out = append(out, s)
+	}
+	return out
+}
+
+// OnlineCount returns the number of authenticated users (by hash).
+// Mirrors Python len(self.onlineUsers).
 func (h *Hub) OnlineCount() int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return len(h.users)
+	return len(h.byHash)
 }
 
 // AtCapacity returns true when MaxUsers has been reached.
@@ -215,28 +286,21 @@ func (h *Hub) AtCapacity() bool {
 	return h.OnlineCount() >= h.cfg.MaxUsers
 }
 
-// KickSession removes a session from the hub immediately and closes its TCP
+// KickSession removes a user from both maps immediately and closes the TCP
 // connection. Removing from the hub first ensures the "already online" guard
-// clears even if the OnClose hook fires after the reconnect attempt.
+// clears even if the OnClose hook fires after a reconnect attempt.
 func (h *Hub) KickSession(s *Session) {
+	if s.User == nil {
+		s.Conn.Close()
+		return
+	}
 	h.mu.Lock()
-	if s.User != nil && s.User.Profile != nil {
-		if current, ok := h.users[s.User.Profile.Name]; ok && current == s {
-			delete(h.users, s.User.Profile.Name)
+	delete(h.byHash, s.User.User.Hash)
+	if s.User.Profile != nil {
+		if current, ok := h.byProfile[s.User.Profile.Name]; ok && current == s {
+			delete(h.byProfile, s.User.Profile.Name)
 		}
 	}
 	h.mu.Unlock()
 	s.Conn.Close()
-}
-
-// Sessions returns a snapshot of all online sessions. Safe to iterate without
-// holding the lock.
-func (h *Hub) Sessions() []*Session {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	out := make([]*Session, 0, len(h.users))
-	for _, s := range h.users {
-		out = append(out, s)
-	}
-	return out
 }

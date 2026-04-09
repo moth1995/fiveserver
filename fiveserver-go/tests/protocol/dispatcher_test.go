@@ -87,6 +87,7 @@ func TestHub_AddRemoveSession(t *testing.T) {
 		Profile: &model.Profile{ID: 1, Name: "player1"},
 	}
 
+	hub.UserOnline(s)
 	hub.AddSession(s)
 	if hub.OnlineCount() != 1 {
 		t.Fatalf("expected 1 online, got %d", hub.OnlineCount())
@@ -97,7 +98,7 @@ func TestHub_AddRemoveSession(t *testing.T) {
 		t.Fatal("GetSession should return the added session")
 	}
 
-	hub.RemoveSession(s)
+	hub.UserOffline(s)
 	if hub.OnlineCount() != 0 {
 		t.Fatalf("expected 0 after remove, got %d", hub.OnlineCount())
 	}
@@ -135,6 +136,7 @@ func TestHub_AtCapacity(t *testing.T) {
 			User:    &model.User{Hash: name},
 			Profile: &model.Profile{ID: len(name), Name: name},
 		}
+		hub.UserOnline(s)
 		hub.AddSession(s)
 		return s
 	}

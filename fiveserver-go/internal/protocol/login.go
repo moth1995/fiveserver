@@ -87,34 +87,28 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		}
 		log.Printf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
 
+		// Check already online by user hash — O(1), matches Python isUserOnline(usr).
+		if hub.IsUserOnline(u) {
+			log.Printf("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
+			return s.Conn.SendData(0x3004, pack32(0xffffff11))
+		}
+
 		// Roster hash check
 		if hub.Config().Roster.EnforceHash && hasNullBlock(clientRosterHash) {
 			log.Printf("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
 			return s.Conn.SendData(0x3004, pack32(0xffffff12))
 		}
 
-		// Load profiles first so we can check "already online" by profile name
-		// (hub is keyed by profile name, not user hash).
+		// Load profiles
 		profiles, err := db.GetProfilesByUserID(ctx, sc, u.ID)
 		if err != nil {
 			log.Printf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
 		log.Printf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
-		// Ensure exactly 3 profile slots (nil = empty)
+		// Ensure exactly 3 profile slots
 		for len(profiles) < 3 {
 			profiles = append(profiles, &model.Profile{Ordinal: len(profiles)})
-		}
-
-		// Check if already online: any of this user's profiles is in the hub.
-		for _, p := range profiles {
-			if p == nil || p.Name == "" {
-				continue
-			}
-			if _, online := hub.GetSession(p.Name); online {
-				log.Printf("[login] %s: user id=%d already online (profile=%s)", s.Conn.RemoteAddr, u.ID, p.Name)
-				return s.Conn.SendData(0x3004, pack32(0xffffff11))
-			}
 		}
 
 		s.User = &model.ConnectedUser{
@@ -128,7 +122,12 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 			s.User.Info.RosterHash = hex.EncodeToString(clientRosterHash)
 		}
 
-		hub.AddSession(s)
+		// Mark online by hash — mirrors Python factory.userOnline(usr).
+		hub.UserOnline(s)
+		// Ensure UserOffline is called when this login connection closes
+		// (handles unclean drops where 0x0003 is never sent).
+		s.OnClose = func() { hub.UserOffline(s) }
+
 		return s.Conn.SendZeros(0x3004, 4)
 	}
 }
@@ -413,8 +412,9 @@ func handleDo3120() HandlerFunc {
 
 func handleDisconnect(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
+		s.OnClose = nil // prevent double-cleanup from serveConn defer
 		if s.User != nil {
-			hub.RemoveSession(s)
+			hub.UserOffline(s)
 		}
 		return nil
 	}

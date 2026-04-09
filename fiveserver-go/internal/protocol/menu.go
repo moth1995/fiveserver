@@ -61,7 +61,7 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		s.OnClose = func() {
 			log.Printf("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
 			exitLobbyAndNotify(hub, s)
-			hub.RemoveSession(s)
+			hub.UserOffline(s)
 		}
 
 		// [4 zeros][4 bytes profile id][33 fixed capability bytes]
@@ -350,7 +350,7 @@ func handleMenuDisconnect(hub *Hub) HandlerFunc {
 		s.OnClose = nil
 		exitLobbyAndNotify(hub, s)
 		if s.User != nil {
-			hub.RemoveSession(s)
+			hub.UserOffline(s)
 		}
 		return nil
 	}
