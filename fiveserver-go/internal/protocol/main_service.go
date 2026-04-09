@@ -246,10 +246,16 @@ func handleMatchExit4370(hub *Hub) HandlerFunc {
 func handleChat4400(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		if s.User == nil || s.User.Profile == nil || s.User.State == nil {
+			log.Printf("[chat] %s: 0x4400 dropped — user/profile/state nil", s.Conn.RemoteAddr)
 			return nil
 		}
 		lobby, ok := hub.GetLobby(s.User.LobbyIndex)
-		if !ok || len(pkt.Data) < 10 {
+		if !ok {
+			log.Printf("[chat] %s: 0x4400 dropped — lobbyIndex=%d not found", s.Conn.RemoteAddr, s.User.LobbyIndex)
+			return nil
+		}
+		if len(pkt.Data) < 10 {
+			log.Printf("[chat] %s: 0x4400 dropped — pkt too short (%d bytes)", s.Conn.RemoteAddr, len(pkt.Data))
 			return nil
 		}
 
@@ -257,6 +263,8 @@ func handleChat4400(hub *Hub) HandlerFunc {
 		chatType := pkt.Data[0:2]
 		rawMsg := model.StripZeros(pkt.Data[10:])
 		text := FilterChat(string(rawMsg), cfg.Chat.BannedWords, cfg.Chat.WarningMessage)
+		log.Printf("[chat] %s {%s}: type=%02x%02x msg=%q lobby=%s players=%d",
+			s.Conn.RemoteAddr, s.User.Profile.Name, chatType[0], chatType[1], text, lobby.Name, len(lobby.Players()))
 
 		pktData := buildChatPacket(
 			chatType[0:1],
@@ -270,13 +278,15 @@ func handleChat4400(hub *Hub) HandlerFunc {
 			// Lobby chat: broadcast + add to history
 			lobby.AddChatMessage(model.NewChatMessage(s.User.Profile, text))
 			for _, u := range lobby.Players() {
+				log.Printf("[chat] broadcasting to {%s}", u.Profile.Name)
 				sendToUser(hub, u, 0x4402, pktData)
 			}
 
 		case chatType[0] == 0x01 && chatType[1] == 0x02:
-			// Room chat
+			// Room chat — snapshot Players to avoid race with concurrent enter/exit
 			if s.User.State.Room != nil {
-				for _, u := range s.User.State.Room.Players {
+				players := append([]*model.ConnectedUser(nil), s.User.State.Room.Players...)
+				for _, u := range players {
 					sendToUser(hub, u, 0x4402, pktData)
 				}
 			}
@@ -779,8 +789,9 @@ func applyDisconnectPenalty(hub *Hub, sc *db.StorageController, s *Session) {
 // ---- room update encoder ----------------------------------------------------
 
 // encodeRoomUpdate builds the 0x4306 room-info wire payload.
-// withTeams=true includes teamId per player (used after room changes);
-// withTeams=false includes just profileId (used at room creation).
+// Both cases use 11 bytes per player slot (mirrors Python exactly):
+//   withTeams=false: [4 profileID][7 zeros]       (room creation / challenge)
+//   withTeams=true:  [4 profileID][2 teamID][5 zeros]  (exit / cancel challenge)
 //
 // Layout:
 //
@@ -789,7 +800,7 @@ func applyDisconnectPenalty(hub *Hub, sc *db.StorageController, s *Session) {
 //	[1]  usePassword
 //	[32] roomName null-padded
 //	[1]  matchTime/5
-//	[48] player slots: each [4 profileID][2 teamID][5 zeros] = 11 bytes × 4 max = 44, pad to 48
+//	[48] player slots: 11 bytes × up to 4 players, zero-padded to 48
 func encodeRoomUpdate(room *model.Room, withTeams bool) []byte {
 	n := len(room.Players)
 	data := make([]byte, 0, 4+1+1+32+1+48)
