@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"log"
 	"math"
+	"time"
 
 	"github.com/fiveserver/fiveserver-go/internal/crypto"
 	"github.com/fiveserver/fiveserver-go/internal/db"
@@ -117,6 +118,7 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 			GameVersion: version,
 			LobbyIndex:  -1,
 			Info:        &model.UserInfo{GameName: version},
+			ConnectedAt: time.Now(),
 		}
 		if len(clientRosterHash) > 0 {
 			s.User.Info.RosterHash = hex.EncodeToString(clientRosterHash)
