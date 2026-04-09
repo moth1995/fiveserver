@@ -132,7 +132,7 @@ func (srv *Server) handleKick(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[admin] kicking %s (addr=%s)", req.Profile, s.Conn.RemoteAddr)
-	s.Conn.Close()
+	srv.hub.KickSession(s)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile})
