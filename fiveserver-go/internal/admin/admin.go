@@ -86,18 +86,22 @@ func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		GameVersion string `json:"game_version"`
 	}
 
-	sessions := srv.hub.Sessions()
+	sessions := srv.hub.AuthenticatedSessions()
 	out := make([]userEntry, 0, len(sessions))
 	for _, s := range sessions {
-		if s.User == nil || s.User.Profile == nil {
+		if s.User == nil {
 			continue
+		}
+		profile := ""
+		if s.User.Profile != nil {
+			profile = s.User.Profile.Name
 		}
 		lobby := ""
 		if l, ok := srv.hub.GetLobby(s.User.LobbyIndex); ok {
 			lobby = l.Name
 		}
 		out = append(out, userEntry{
-			Profile:     s.User.Profile.Name,
+			Profile:     profile,
 			Username:    s.User.User.Username,
 			Lobby:       lobby,
 			Addr:        s.Conn.RemoteAddr,
