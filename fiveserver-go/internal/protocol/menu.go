@@ -361,10 +361,10 @@ func FilterChat(msg string, bannedWords []string, warning string) string {
 
 // ---- broadcastSystemChat ----------------------------------------------------
 
-// broadcastSystemChat sends a server-generated chat message to every player in
+// BroadcastSystemChat sends a server-generated chat message to every player in
 // the lobby and adds it to the chat history.
 // Matches Python NetworkMenuService.broadcastSystemChat exactly.
-func broadcastSystemChat(hub *Hub, lobby *model.Lobby, text string) {
+func BroadcastSystemChat(hub *Hub, lobby *model.Lobby, text string) {
 	msg := model.NewChatMessage(model.SystemProfile, text)
 	data := buildChatPacket([]byte{0}, []byte{0, 0, 0, 0}, model.SystemProfile, text)
 	for _, u := range lobby.Players() {
@@ -385,7 +385,7 @@ func StartDayChangeTimer(hub *Hub) {
 				// no connection to broadcast through — just add to history
 				lobby.AddChatMessage(model.NewChatMessage(model.SystemProfile, message))
 			} else {
-				broadcastSystemChat(hub, lobby, message)
+				BroadcastSystemChat(hub, lobby, message)
 			}
 			lobby.PurgeOldChat()
 		}

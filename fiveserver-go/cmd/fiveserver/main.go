@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/fiveserver/fiveserver-go/internal/admin"
 	"github.com/fiveserver/fiveserver-go/internal/config"
 	"github.com/fiveserver/fiveserver-go/internal/db"
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
@@ -59,6 +60,17 @@ func main() {
 	listenOn := cfg.ListenOn
 	if listenOn == "" {
 		listenOn = "0.0.0.0"
+	}
+
+	// Admin HTTP server
+	if cfg.WebInterface.Port != 0 {
+		adminAddr := fmt.Sprintf("%s:%d", listenOn, cfg.WebInterface.Port)
+		go func() {
+			adminSrv := admin.NewServer(hub)
+			if err := adminSrv.ListenAndServe(adminAddr); err != nil {
+				log.Printf("admin: %v", err)
+			}
+		}()
 	}
 
 	usedPorts := make(map[int]bool)
@@ -111,7 +123,7 @@ func main() {
 			protocol.NewMainServiceDispatcher(hub, sc, "pes5"))
 	}
 
-	// ---- 6. Wait for shutdown signal -------------------------------------------
+	// ---- 7. Wait for shutdown signal -------------------------------------------
 	log.Printf("fiveserver: all listeners started — Ctrl+C to stop")
 	<-ctx.Done()
 	log.Printf("fiveserver: shutting down…")
