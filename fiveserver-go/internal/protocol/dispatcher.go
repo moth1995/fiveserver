@@ -174,12 +174,17 @@ func (h *Hub) Config() *config.Config { return h.cfg }
 // ---- online tracking (byHash) -----------------------------------------------
 
 // UserOnline marks a user as online after successful authentication (0x3003).
+// If the user is already tracked (reconnecting on a new port), the original
+// ConnectedAt is preserved so the online timer doesn't reset.
 // Mirrors Python FiveServerFactory.userOnline(usr).
 func (h *Hub) UserOnline(s *Session) {
 	if s.User == nil {
 		return
 	}
 	h.mu.Lock()
+	if prev, ok := h.byHash[s.User.User.Hash]; ok && prev.User != nil && !prev.User.ConnectedAt.IsZero() {
+		s.User.ConnectedAt = prev.User.ConnectedAt
+	}
 	h.byHash[s.User.User.Hash] = s
 	h.mu.Unlock()
 	log.Printf("[hub] UserOnline {id=%d} addr=%s", s.User.User.ID, s.Conn.RemoteAddr)
