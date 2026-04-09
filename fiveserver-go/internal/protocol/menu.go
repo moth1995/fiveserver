@@ -56,6 +56,14 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		s.User.Conn = s.Conn   // wire current connection so sendToUser fallback works
 		hub.AddSession(s)      // register session now that profile is known
 
+		// Run full disconnect cleanup when the TCP connection closes (including
+		// forced closes from the admin kick endpoint — those never send 0x0003).
+		s.OnClose = func() {
+			log.Printf("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
+			exitLobbyAndNotify(hub, s)
+			hub.RemoveSession(s)
+		}
+
 		// [4 zeros][4 bytes profile id][33 fixed capability bytes]
 		// Python: b'\0'*4 + pack('!i', id) + b'\xff'*7+b'\x80'+b'\xff'*15+b'\xc0'+b'\2'*7+b'\1\0'
 		data := make([]byte, 4)
