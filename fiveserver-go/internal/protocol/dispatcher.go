@@ -169,6 +169,7 @@ func (h *Hub) AddSession(s *Session) {
 	h.mu.Lock()
 	h.users[s.User.Profile.Name] = s
 	h.mu.Unlock()
+	log.Printf("[hub] AddSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
 }
 
 // RemoveSession removes a session from the online map.
@@ -177,8 +178,17 @@ func (h *Hub) RemoveSession(s *Session) {
 		return
 	}
 	h.mu.Lock()
-	delete(h.users, s.User.Profile.Name)
-	h.mu.Unlock()
+	current, exists := h.users[s.User.Profile.Name]
+	if exists && current == s {
+		delete(h.users, s.User.Profile.Name)
+		h.mu.Unlock()
+		log.Printf("[hub] RemoveSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
+	} else {
+		h.mu.Unlock()
+		if exists {
+			log.Printf("[hub] RemoveSession {%s} addr=%s — SKIPPED (hub points to different session addr=%s)", s.User.Profile.Name, s.Conn.RemoteAddr, current.Conn.RemoteAddr)
+		}
+	}
 }
 
 // GetSession looks up an online session by profile name.
