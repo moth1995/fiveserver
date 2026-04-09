@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 )
@@ -79,11 +80,12 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 // handleUsers handles GET /api/users — returns all online sessions.
 func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	type userEntry struct {
-		Profile     string `json:"profile"`
-		Username    string `json:"username"`
-		Lobby       string `json:"lobby"`
-		Addr        string `json:"addr"`
-		GameVersion string `json:"game_version"`
+		Profile       string `json:"profile"`
+		Username      string `json:"username"`
+		Lobby         string `json:"lobby"`
+		Addr          string `json:"addr"`
+		GameVersion   string `json:"game_version"`
+		OnlineSeconds int    `json:"online_seconds"`
 	}
 
 	sessions := srv.hub.AuthenticatedSessions()
@@ -101,11 +103,12 @@ func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 			lobby = l.Name
 		}
 		out = append(out, userEntry{
-			Profile:     profile,
-			Username:    s.User.User.Username,
-			Lobby:       lobby,
-			Addr:        s.Conn.RemoteAddr,
-			GameVersion: s.GameVersion,
+			Profile:       profile,
+			Username:      s.User.User.Username,
+			Lobby:         lobby,
+			Addr:          s.Conn.RemoteAddr,
+			GameVersion:   s.User.GameVersion,
+			OnlineSeconds: int(time.Since(s.User.ConnectedAt).Seconds()),
 		})
 	}
 
