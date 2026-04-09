@@ -31,6 +31,9 @@ func scanProfile(rows *sql.Rows) (*model.Profile, error) {
 
 // GetProfileByID fetches a single non-deleted profile by primary key.
 func GetProfileByID(ctx context.Context, sc *StorageController, id int) (*model.Profile, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + profileSelectCols + ` FROM profiles WHERE deleted=0 AND id=?`
 	rows, err := sc.Read.DB().QueryContext(ctx, q, id)
 	if err != nil {
@@ -53,6 +56,9 @@ func GetProfileByID(ctx context.Context, sc *StorageController, id int) (*model.
 // GetProfilesByUserID returns all non-deleted profiles for a user, ordered by
 // updated_on ASC (matches Python ProfileData.getByUserId).
 func GetProfilesByUserID(ctx context.Context, sc *StorageController, userID int) ([]*model.Profile, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + profileSelectCols + `
 	      FROM profiles WHERE deleted=0 AND user_id=?
 	      ORDER BY updated_on ASC`
@@ -74,6 +80,9 @@ func GetProfilesByUserID(ctx context.Context, sc *StorageController, userID int)
 
 // CreateProfile inserts a new profile. Returns the new profile ID.
 func CreateProfile(ctx context.Context, sc *StorageController, userID int, name string, ordinal int) (int, error) {
+	if sc == nil {
+		return 0, ErrNoDB
+	}
 	q := `INSERT INTO profiles (user_id, ordinal, name) VALUES (?, ?, ?)`
 	res, err := sc.Write.DB().ExecContext(ctx, q, userID, ordinal, name)
 	if err != nil {
@@ -88,6 +97,9 @@ func CreateProfile(ctx context.Context, sc *StorageController, userID int, name 
 
 // DeleteProfile soft-deletes a profile.
 func DeleteProfile(ctx context.Context, sc *StorageController, id int) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `UPDATE profiles SET deleted=1 WHERE id=?`
 	if _, err := sc.Write.DB().ExecContext(ctx, q, id); err != nil {
 		return fmt.Errorf("db/profile: delete: %w", err)
@@ -97,6 +109,9 @@ func DeleteProfile(ctx context.Context, sc *StorageController, id int) error {
 
 // UpdateProfileStats persists mutable profile fields. Mirrors Python ProfileData.store().
 func UpdateProfileStats(ctx context.Context, sc *StorageController, p *model.Profile) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `INSERT INTO profiles (id, user_id, ordinal, name, fav_player, fav_team, ` + "`rank`" + `, points, disconnects, seconds_played)
 	      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	      ON DUPLICATE KEY UPDATE
@@ -119,6 +134,9 @@ func UpdateProfileStats(ctx context.Context, sc *StorageController, p *model.Pro
 // GetLeaderboard returns the top `limit` profiles ordered by points DESC,
 // seconds_played DESC (used for rank display).
 func GetLeaderboard(ctx context.Context, sc *StorageController, limit int) ([]*model.Profile, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT ` + profileSelectCols + `
 	      FROM profiles WHERE deleted=0
 	      ORDER BY points DESC, seconds_played DESC
@@ -141,6 +159,9 @@ func GetLeaderboard(ctx context.Context, sc *StorageController, limit int) ([]*m
 
 // GetProfileSettings returns stored settings blobs for a profile.
 func GetProfileSettings(ctx context.Context, sc *StorageController, profileID int) (*model.ProfileSettings, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
 	q := `SELECT settings1, settings2 FROM settings WHERE profile_id=?`
 	row := sc.Read.DB().QueryRowContext(ctx, q, profileID)
 	var s model.ProfileSettings
@@ -156,6 +177,9 @@ func GetProfileSettings(ctx context.Context, sc *StorageController, profileID in
 
 // StoreProfileSettings upserts settings blobs for a profile.
 func StoreProfileSettings(ctx context.Context, sc *StorageController, profileID int, s *model.ProfileSettings) error {
+	if sc == nil {
+		return ErrNoDB
+	}
 	q := `INSERT INTO settings (profile_id, settings1, settings2)
 	      VALUES (?, ?, ?)
 	      ON DUPLICATE KEY UPDATE settings1=VALUES(settings1), settings2=VALUES(settings2)`
