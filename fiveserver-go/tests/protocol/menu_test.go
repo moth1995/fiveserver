@@ -168,6 +168,40 @@ func TestSelectLobby_ValidLobby_SendsZerosAndEntersLobby(t *testing.T) {
 	}
 }
 
+func TestSelectLobby_WithOptionalField_PreservesNetworkState(t *testing.T) {
+	hub := menuHub(100, config.Lobby{Name: "EU"})
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	s, _ := sessionWithProfile(hub, 1, "Player1")
+	hub.AddSession(s)
+
+	pktData := make([]byte, 39)
+	pktData[0] = 0
+	copy(pktData[1:17], []byte("abcdefghijklmnop"))
+	binary.BigEndian.PutUint16(pktData[17:19], 1111)
+	copy(pktData[19:35], []byte("qrstuvwxyzABCDEF"))
+	binary.BigEndian.PutUint16(pktData[35:37], 2222)
+	binary.BigEndian.PutUint16(pktData[37:39], 3333)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4202}, Data: pktData}
+	_ = d.Dispatch(s, pkt)
+
+	if s.User.State == nil {
+		t.Fatal("State should not be nil after selectLobby")
+	}
+	if s.User.State.UDPPort2 != 2222 {
+		t.Errorf("UDPPort2 = %d, want 2222", s.User.State.UDPPort2)
+	}
+	if s.User.State.SomeField != 3333 {
+		t.Errorf("SomeField = %d, want 3333", s.User.State.SomeField)
+	}
+	if string(s.User.State.IP1) != "abcdefghijklmnop" {
+		t.Errorf("IP1 = %q, want %q", string(s.User.State.IP1), "abcdefghijklmnop")
+	}
+	if string(s.User.State.IP2) != "qrstuvwxyzABCDEF" {
+		t.Errorf("IP2 = %q, want %q", string(s.User.State.IP2), "qrstuvwxyzABCDEF")
+	}
+}
+
 func TestSelectLobby_InvalidLobbyIndex_NoOp(t *testing.T) {
 	hub := menuHub(100) // no lobbies
 	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
@@ -207,6 +241,52 @@ func TestGetUserList_NoLobby_SendsEmptySequence(t *testing.T) {
 	}
 }
 
+func TestGetUserList_EncodesRoomAndChatFlags(t *testing.T) {
+	hub := menuHub(100, config.Lobby{Name: "EU"})
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+
+	s1, cap1 := sessionWithProfile(hub, 1, "Alpha")
+	s2, _ := sessionWithProfile(hub, 2, "Beta")
+	hub.AddSession(s1)
+	hub.AddSession(s2)
+
+	lobby, _ := hub.GetLobby(0)
+	room := model.NewRoom(lobby)
+	lobby.AddRoom(room)
+
+	s1.User.LobbyIndex = 0
+	s2.User.LobbyIndex = 0
+	s2.User.State = &model.NetworkState{InRoom: true, NoLobbyChat: 5, Room: room}
+	lobby.Enter(s1.User)
+	lobby.Enter(s2.User)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4210}}
+	_ = d.Dispatch(s1, pkt)
+
+	var entry []byte
+	for _, send := range cap1.sends {
+		if send.id == 0x4212 && binary.BigEndian.Uint32(send.data[0:4]) == 2 {
+			entry = send.data
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatal("expected a 0x4212 entry for profile 2")
+	}
+	if len(entry) != 31 {
+		t.Fatalf("entry len = %d, want 31", len(entry))
+	}
+	if entry[20] != 1 {
+		t.Errorf("inRoom flag = %d, want 1", entry[20])
+	}
+	if roomID := int32(binary.BigEndian.Uint32(entry[21:25])); roomID != int32(room.ID) {
+		t.Errorf("roomID = %d, want %d", roomID, room.ID)
+	}
+	if noLobbyChat := int32(binary.BigEndian.Uint32(entry[25:29])); noLobbyChat != 5 {
+		t.Errorf("noLobbyChat = %d, want 5", noLobbyChat)
+	}
+}
+
 // ---- 0x4300 getRoomList -----------------------------------------------------
 
 func TestGetRoomList_NoLobby_SendsEmptySequence(t *testing.T) {
@@ -227,6 +307,59 @@ func TestGetRoomList_NoLobby_SendsEmptySequence(t *testing.T) {
 	}
 	if cap.sends[1].id != 0x4303 {
 		t.Errorf("send[1].id = 0x%04x, want 0x4303", cap.sends[1].id)
+	}
+}
+
+func TestGetRoomList_EncodesPasswordAndPlayerIDs(t *testing.T) {
+	hub := menuHub(100, config.Lobby{Name: "EU"})
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+
+	s1, cap1 := sessionWithProfile(hub, 11, "P1")
+	s2, _ := sessionWithProfile(hub, 22, "P2")
+	hub.AddSession(s1)
+	hub.AddSession(s2)
+
+	lobby, _ := hub.GetLobby(0)
+	s1.User.LobbyIndex = 0
+	s2.User.LobbyIndex = 0
+	lobby.Enter(s1.User)
+	lobby.Enter(s2.User)
+
+	room := model.NewRoom(lobby)
+	room.Name = "Room1"
+	room.UsePassword = true
+	room.MatchTime = 15
+	room.Enter(s1.User)
+	room.Enter(s2.User)
+	lobby.AddRoom(room)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4300}}
+	_ = d.Dispatch(s1, pkt)
+
+	var entry []byte
+	for _, send := range cap1.sends {
+		if send.id == 0x4302 {
+			entry = send.data
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatal("expected a 0x4302 room entry")
+	}
+	if roomID := int32(binary.BigEndian.Uint32(entry[0:4])); roomID != int32(room.ID) {
+		t.Errorf("roomID = %d, want %d", roomID, room.ID)
+	}
+	if entry[5] != 1 {
+		t.Errorf("password flag = %d, want 1", entry[5])
+	}
+	if entry[38] != 3 {
+		t.Errorf("match time byte = %d, want 3", entry[38])
+	}
+	if playerID := int32(binary.BigEndian.Uint32(entry[39:43])); playerID != 11 {
+		t.Errorf("first player ID = %d, want 11", playerID)
+	}
+	if playerID := int32(binary.BigEndian.Uint32(entry[43:47])); playerID != 22 {
+		t.Errorf("second player ID = %d, want 22", playerID)
 	}
 }
 
