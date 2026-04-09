@@ -272,6 +272,19 @@ func (h *Hub) Sessions() []*Session {
 	return out
 }
 
+// AuthenticatedSessions returns a snapshot of all sessions that have
+// completed authentication (0x3003), including those who haven't yet
+// selected a profile. Mirrors Python onlineUsers.
+func (h *Hub) AuthenticatedSessions() []*Session {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*Session, 0, len(h.byHash))
+	for _, s := range h.byHash {
+		out = append(out, s)
+	}
+	return out
+}
+
 // OnlineCount returns the number of authenticated users (by hash).
 // Mirrors Python len(self.onlineUsers).
 func (h *Hub) OnlineCount() int {
