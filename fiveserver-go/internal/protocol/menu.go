@@ -53,15 +53,17 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 			return nil
 		}
 		s.User.Profile = s.User.Profiles[profileIndex]
+		s.User.Conn = s.Conn   // wire current connection so sendToUser fallback works
+		hub.AddSession(s)      // register session now that profile is known
 
 		// [4 zeros][4 bytes profile id][33 fixed capability bytes]
 		// Python: b'\0'*4 + pack('!i', id) + b'\xff'*7+b'\x80'+b'\xff'*15+b'\xc0'+b'\2'*7+b'\1\0'
 		data := make([]byte, 4)
 		data = append(data, pack32i(int32(s.User.Profile.ID))...)
 		flags := []byte{
-			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80,
-			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0,
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, // \xff*7 + \x80
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,        // 7 of \xff*15
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0, // remaining 8 + \xc0
 			0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x01, 0x00,
 		}
 		data = append(data, flags...)
@@ -509,18 +511,30 @@ func formatProfileInfo(p *model.Profile, s *model.Stats, showStats bool) []byte 
 // sendToUser delivers a packet to a ConnectedUser by looking up their Session in the Hub.
 // Falls back to u.Conn if the session is not found in the hub (e.g. not yet profiled).
 func sendToUser(hub *Hub, u *model.ConnectedUser, id uint16, data []byte) {
+	name := ""
+	if u.Profile != nil {
+		name = u.Profile.Name
+	}
 	if u.Profile != nil {
 		if sess, ok := hub.GetSession(u.Profile.Name); ok {
-			_ = sess.Conn.SendData(id, data)
+			log.Printf("[sendToUser] {%s} pkt=0x%04x — via hub session (addr=%s)", name, id, sess.Conn.RemoteAddr)
+			if err := sess.Conn.SendData(id, data); err != nil {
+				log.Printf("[sendToUser] {%s} pkt=0x%04x — hub send error: %v", name, id, err)
+			}
 			return
 		}
 	}
 	// fallback: direct conn (set by server layer)
 	if u.Conn != nil {
 		if cs, ok := u.Conn.(*ConnSender); ok {
-			_ = cs.SendData(id, data)
+			log.Printf("[sendToUser] {%s} pkt=0x%04x — via direct conn (addr=%s)", name, id, cs.RemoteAddr)
+			if err := cs.SendData(id, data); err != nil {
+				log.Printf("[sendToUser] {%s} pkt=0x%04x — direct send error: %v", name, id, err)
+			}
+			return
 		}
 	}
+	log.Printf("[sendToUser] {%s} pkt=0x%04x — no route found (hub miss, no conn)", name, id)
 }
 
 // ---- exitLobbyAndNotify -----------------------------------------------------
