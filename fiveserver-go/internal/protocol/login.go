@@ -87,19 +87,14 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		}
 		log.Printf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
 
-		// Check if already online
-		if _, online := hub.GetSession(userHashKey(u)); online {
-			log.Printf("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
-			return s.Conn.SendData(0x3004, pack32(0xffffff11))
-		}
-
 		// Roster hash check
 		if hub.Config().Roster.EnforceHash && hasNullBlock(clientRosterHash) {
 			log.Printf("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
 			return s.Conn.SendData(0x3004, pack32(0xffffff12))
 		}
 
-		// Load profiles
+		// Load profiles first so we can check "already online" by profile name
+		// (hub is keyed by profile name, not user hash).
 		profiles, err := db.GetProfilesByUserID(ctx, sc, u.ID)
 		if err != nil {
 			log.Printf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
@@ -109,6 +104,17 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		// Ensure exactly 3 profile slots (nil = empty)
 		for len(profiles) < 3 {
 			profiles = append(profiles, &model.Profile{Ordinal: len(profiles)})
+		}
+
+		// Check if already online: any of this user's profiles is in the hub.
+		for _, p := range profiles {
+			if p == nil || p.Name == "" {
+				continue
+			}
+			if _, online := hub.GetSession(p.Name); online {
+				log.Printf("[login] %s: user id=%d already online (profile=%s)", s.Conn.RemoteAddr, u.ID, p.Name)
+				return s.Conn.SendData(0x3004, pack32(0xffffff11))
+			}
 		}
 
 		s.User = &model.ConnectedUser{
@@ -425,8 +431,6 @@ func pack32(v uint32) []byte {
 func pack32i(v int32) []byte {
 	return pack32(uint32(v))
 }
-
-func userHashKey(u *model.User) string { return u.Hash }
 
 // hasNullBlock returns true if b contains 4 consecutive zero bytes.
 // Mirrors Python: clientRosterHash.find(b'\0\0\0\0') != -1
