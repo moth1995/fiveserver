@@ -1,7 +1,10 @@
 package protocol_test
 
 import (
+	"bytes"
+	"compress/zlib"
 	"encoding/binary"
+	"io"
 	"testing"
 
 	"github.com/fiveserver/fiveserver-go/internal/model"
@@ -79,17 +82,28 @@ func TestDo3088_Settings1_Stored(t *testing.T) {
 	}
 
 	// pkt.Data[2] == 3 → stored as Settings1
+	origData := []byte{0x01, 0x02, 0x03, 0xAA, 0xBB}
 	pkt := protocol.Packet{
 		Header: protocol.Header{ID: 0x3088},
-		Data:   []byte{0x01, 0x02, 0x03, 0xAA, 0xBB},
+		Data:   origData,
 	}
 	_ = d.Dispatch(s, pkt)
 
 	if len(s.User.Profile.Settings.Settings1) == 0 {
 		t.Error("Settings1 should have been stored")
 	}
-	if s.User.Profile.Settings.Settings1[2] != 0x03 {
-		t.Errorf("Settings1[2] = 0x%x, want 0x03", s.User.Profile.Settings.Settings1[2])
+	// Settings are stored zlib-compressed; decompress and verify round-trip.
+	r, err := zlib.NewReader(bytes.NewReader(s.User.Profile.Settings.Settings1))
+	if err != nil {
+		t.Fatalf("stored Settings1 is not valid zlib: %v", err)
+	}
+	dec, err := io.ReadAll(r)
+	r.Close()
+	if err != nil {
+		t.Fatalf("decompress Settings1: %v", err)
+	}
+	if !bytes.Equal(dec, origData) {
+		t.Errorf("decompressed Settings1 = %#v, want %#v", dec, origData)
 	}
 }
 

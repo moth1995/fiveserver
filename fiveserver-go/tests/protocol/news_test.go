@@ -33,7 +33,7 @@ func newCaptureSession(hub *protocol.Hub) (*protocol.Session, *captureConn) {
 		SendFn:     func(pkt protocol.Packet) error { return nil },
 		RemoteAddr: "1.2.3.4:5678",
 	}
-	s := &protocol.Session{Conn: cs, Hub: hub, GameVersion: "pes5"}
+	s := &protocol.Session{Conn: cs, Hub: hub}
 	return s, cap
 }
 
@@ -44,7 +44,7 @@ func newsHub(maxUsers int) *protocol.Hub {
 		NetworkServer: config.NetworkServerConfig{
 			MainService:        20100,
 			NetworkMenuService: 20101,
-			LoginService:       map[string]int{"pes5": 20102, "we9": 20103, "we9le": 20104},
+			LoginService:       []config.GamePortEntry{{Port: 20102, Version: "pes5"}, {Port: 20103, Version: "we9"}, {Port: 20104, Version: "we9le"}},
 		},
 		Greeting: config.GreetingConfig{Text: "Welcome!"},
 	})

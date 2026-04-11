@@ -17,7 +17,7 @@ func menuHub(maxUsers int, lobbies ...config.Lobby) *protocol.Hub {
 		ServerName: "Test",
 		Lobbies:    lobbies,
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 }

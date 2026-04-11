@@ -84,10 +84,16 @@ func TestExitRoom_BroadcastsRoomUpdateToLobby(t *testing.T) {
 	// Second lobby member (not in room) — will receive broadcast
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "2.2.2.2:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "2.2.2.2:9999",
 	}
 	u2 := &model.ConnectedUser{
 		User:       &model.User{Hash: "Watcher"},
@@ -124,10 +130,16 @@ func TestChat_LobbyChat_BroadcastsToAllLobbyMembers(t *testing.T) {
 
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "2.2.2.2:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "2.2.2.2:9999",
 	}
 	u2 := &model.ConnectedUser{
 		User: &model.User{Hash: "Receiver"}, Profile: &model.Profile{ID: 2, Name: "Receiver"},
@@ -193,10 +205,16 @@ func TestChat_RoomChat_OnlySentToRoomMembers(t *testing.T) {
 	// Second player in room
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "2.2.2.2:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "2.2.2.2:9999",
 	}
 	u2 := &model.ConnectedUser{
 		User: &model.User{Hash: "P2"}, Profile: &model.Profile{ID: 2, Name: "P2"},
@@ -210,10 +228,16 @@ func TestChat_RoomChat_OnlySentToRoomMembers(t *testing.T) {
 	// Lobby member outside room
 	cap3 := &captureConn{}
 	cs3 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap3.sends = append(cap3.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap3.sends = append(cap3.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "3.3.3.3:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap3.sends = append(cap3.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap3.sends = append(cap3.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "3.3.3.3:9999",
 	}
 	u3 := &model.ConnectedUser{
 		User: &model.User{Hash: "P3"}, Profile: &model.Profile{ID: 3, Name: "P3"},
@@ -263,9 +287,15 @@ func TestChat_PrivateMessage_SentToTargetAndSenderOnly(t *testing.T) {
 	// Target
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn: func(pkt protocol.Packet) error { return nil },
 	}
 	u2 := &model.ConnectedUser{
 		User: &model.User{Hash: "Target"}, Profile: &model.Profile{ID: 2, Name: "Target"},
@@ -279,7 +309,10 @@ func TestChat_PrivateMessage_SentToTargetAndSenderOnly(t *testing.T) {
 	// Third user who should NOT get the message
 	cap3 := &captureConn{}
 	cs3 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap3.sends = append(cap3.sends, capturedSend{id, data}); return nil },
+		SendDataFn: func(id uint16, data []byte) error {
+			cap3.sends = append(cap3.sends, capturedSend{id, data})
+			return nil
+		},
 		SendZerosFn: func(id uint16, length int) error { return nil },
 		SendFn:      func(pkt protocol.Packet) error { return nil },
 	}
@@ -336,7 +369,7 @@ func TestChat_BannedWord_ReplacedWithWarning(t *testing.T) {
 			WarningMessage: "CENSORED",
 		},
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
@@ -394,8 +427,8 @@ func TestPing_TargetFound_SendsNetworkInfo(t *testing.T) {
 	// Add a target in the same lobby with known network state
 	sTarget, _ := newCaptureSession(hub)
 	sTarget.User = &model.ConnectedUser{
-		User:    &model.User{Hash: "Target"},
-		Profile: &model.Profile{ID: 2, Name: "Target"},
+		User:       &model.User{Hash: "Target"},
+		Profile:    &model.Profile{ID: 2, Name: "Target"},
 		LobbyIndex: 0,
 		State: &model.NetworkState{
 			IP1:      []byte("192.168.1.1\x00\x00\x00\x00\x00"),
@@ -457,9 +490,15 @@ func TestChallengeResponse_Rejected_NotifiesChallenger(t *testing.T) {
 	// Challenger session
 	capChal := &captureConn{}
 	csChal := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { capChal.sends = append(capChal.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { capChal.sends = append(capChal.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
+		SendDataFn: func(id uint16, data []byte) error {
+			capChal.sends = append(capChal.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			capChal.sends = append(capChal.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn: func(pkt protocol.Packet) error { return nil },
 	}
 	uChal := &model.ConnectedUser{
 		User: &model.User{Hash: "Challenger"}, Profile: &model.Profile{ID: 2, Name: "Challenger"},
@@ -498,7 +537,10 @@ func TestRelayRoomSettings_ForwardsToOtherRoomMember(t *testing.T) {
 
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
 		SendZerosFn: func(id uint16, length int) error { return nil },
 		SendFn:      func(pkt protocol.Packet) error { return nil },
 	}
@@ -590,7 +632,7 @@ func TestMatchSeriesExit_NoStatsLobby_SkipsDB(t *testing.T) {
 		MaxUsers: 100, ServerName: "Test",
 		Lobbies: []config.Lobby{{Name: "Training", TypeCode: 0x20}}, // no-stats
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
@@ -613,10 +655,16 @@ func TestCreateRoom_RoomUpdatePayloadSize(t *testing.T) {
 
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "1.1.1.1:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "1.1.1.1:9999",
 	}
 	u := &model.ConnectedUser{
 		User:       &model.User{Hash: "U"},
@@ -713,9 +761,15 @@ func TestCancelChallenge_InRoom_ExitsAndBroadcasts(t *testing.T) {
 	// Challenger enters room
 	capChal := &captureConn{}
 	csChal := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { capChal.sends = append(capChal.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { capChal.sends = append(capChal.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
+		SendDataFn: func(id uint16, data []byte) error {
+			capChal.sends = append(capChal.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			capChal.sends = append(capChal.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn: func(pkt protocol.Packet) error { return nil },
 	}
 	uChal := &model.ConnectedUser{
 		User: &model.User{Hash: "Chal"}, Profile: &model.Profile{ID: 2, Name: "Chal"},

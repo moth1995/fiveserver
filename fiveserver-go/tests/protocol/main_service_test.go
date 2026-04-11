@@ -17,7 +17,7 @@ func mainHub(lobbies ...config.Lobby) *protocol.Hub {
 		ServerName: "Test",
 		Lobbies:    lobbies,
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 }
@@ -34,7 +34,7 @@ func mainHubWithDC(playerScore, opponentScore int) *protocol.Hub {
 			},
 		},
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 }
@@ -376,10 +376,16 @@ func TestToggleReady_RelaysToOthers(t *testing.T) {
 	// Add a second player to the room using ConnSender
 	cap2 := &captureConn{}
 	cs2 := &protocol.ConnSender{
-		SendDataFn:  func(id uint16, data []byte) error { cap2.sends = append(cap2.sends, capturedSend{id, data}); return nil },
-		SendZerosFn: func(id uint16, length int) error { cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)}); return nil },
-		SendFn:      func(pkt protocol.Packet) error { return nil },
-		RemoteAddr:  "2.3.4.5:9999",
+		SendDataFn: func(id uint16, data []byte) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, data})
+			return nil
+		},
+		SendZerosFn: func(id uint16, length int) error {
+			cap2.sends = append(cap2.sends, capturedSend{id, make([]byte, length)})
+			return nil
+		},
+		SendFn:     func(pkt protocol.Packet) error { return nil },
+		RemoteAddr: "2.3.4.5:9999",
 	}
 	u2 := &model.ConnectedUser{
 		User:       &model.User{Hash: "P2"},
