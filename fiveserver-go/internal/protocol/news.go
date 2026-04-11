@@ -18,6 +18,7 @@ func NewNewsDispatcher(hub *Hub, version string) *Dispatcher {
 	d.Register(0x2008, makeGetNews(hub, version))
 	d.Register(0x2005, makeGetServerList(hub, version))
 	d.Register(0x2006, makeGetTime())
+	d.DefaultHandler = echoDefaultHandler()
 	return d
 }
 
@@ -76,6 +77,12 @@ func makeGetNews(hub *Hub, version string) HandlerFunc {
 			if err := s.Conn.SendData(0x200a, buildMessage(title, text, true)); err != nil {
 				return err
 			}
+			// NEW_FEATURES: additional version-specific announcement (mirrors Python NEW_FEATURES dict)
+			if ann, ok := cfg.NewFeatures[version]; ok {
+				if err := s.Conn.SendData(0x200a, buildMessage(ann.Title, ann.Text, true)); err != nil {
+					return err
+				}
+			}
 		}
 
 		// Always terminate with 0x200b (0 bytes)
@@ -95,7 +102,7 @@ func buildMessage(title, text string, stripText bool) []byte {
 	ts := time.Now().UTC().Format("2006-01-02 15:04:05")
 	var data []byte
 	data = append(data, 0, 0, 0, 0) // 4 zero bytes
-	data = append(data, 0x01, 0x01)  // flags
+	data = append(data, 0x01, 0x01) // flags
 	data = append(data, model.PadWithZeros(ts, 19)...)
 	data = append(data, model.PadWithZeros(title, 64)...)
 	padded := model.PadWithZeros(text, 512)
@@ -111,13 +118,14 @@ func buildMessage(title, text string, stripText bool) []byte {
 
 // serverEntry mirrors one row of the Python servers list in getServerList_2005.
 // Wire layout per entry (65 bytes):
-//   [4] id        int32  big-endian  (always -1)
-//   [4] type      int32  big-endian  (2=main, 3=menu, 1=login)
-//   [32] name     null-padded string
-//   [15] ip       null-padded string (IPv4 max 15 chars)
-//   [2] port      uint16 big-endian
-//   [2] users     uint16 big-endian
-//   [2] unknown   uint16 big-endian  (same as type)
+//
+//	[4] id        int32  big-endian  (always -1)
+//	[4] type      int32  big-endian  (2=main, 3=menu, 1=login)
+//	[32] name     null-padded string
+//	[15] ip       null-padded string (IPv4 max 15 chars)
+//	[2] port      uint16 big-endian
+//	[2] users     uint16 big-endian
+//	[2] unknown   uint16 big-endian  (same as type)
 type serverEntry struct {
 	id      int32
 	stype   int32
@@ -144,10 +152,16 @@ func makeGetServerList(hub *Hub, version string) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		cfg := hub.Config()
 
-		// Determine the login port for this game version
-		loginPort, ok := cfg.NetworkServer.LoginService[version]
-		if !ok {
-			loginPort = cfg.NetworkServer.LoginService["pes5"] // fallback
+		// Determine the login port for this game version by searching the slice.
+		loginPort := 0
+		for _, ls := range cfg.NetworkServer.LoginService {
+			if ls.Version == version {
+				loginPort = ls.Port
+				break
+			}
+		}
+		if loginPort == 0 && len(cfg.NetworkServer.LoginService) > 0 {
+			loginPort = cfg.NetworkServer.LoginService[0].Port // fallback
 		}
 
 		serverIP := cfg.ServerIPWAN()

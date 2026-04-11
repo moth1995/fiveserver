@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"sync"
@@ -74,7 +75,7 @@ func main() {
 	}
 
 	usedPorts := make(map[int]bool)
-	listen := func(addr string, port int, d *protocol.Dispatcher) {
+	listen := func(addr string, port int, d *protocol.Dispatcher, filter ...func(string) error) {
 		if usedPorts[port] {
 			log.Printf("skipping duplicate port %d", port)
 			return
@@ -84,43 +85,52 @@ func main() {
 		go func() {
 			defer wg.Done()
 			log.Printf("listening on %s", addr)
-			if err := server.Serve(addr, d, ctx.Done(), cfg.Debug); err != nil {
+			if err := server.Serve(addr, d, ctx.Done(), cfg.Debug, filter...); err != nil {
 				log.Printf("server %s: %v", addr, err)
 			}
 		}()
 	}
 
+	// connectFilter rejects banned IPs and connections when the server is at
+	// capacity. Mirrors Python IsBanned + AtCapacity guards in LoginService.
+	connectFilter := func(remoteAddr string) error {
+		host := remoteAddr
+		if h, _, err := net.SplitHostPort(remoteAddr); err == nil {
+			host = h
+		}
+		if cfg.IsBanned(host) {
+			return fmt.Errorf("banned")
+		}
+		if hub.AtCapacity() {
+			return fmt.Errorf("server at capacity")
+		}
+		return nil
+	}
+
 	// News service — one per game version
-	if cfg.GamePorts.PES5 != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.PES5), cfg.GamePorts.PES5,
-			protocol.NewNewsDispatcher(hub, "pes5"))
-	}
-	if cfg.GamePorts.WE9 != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9), cfg.GamePorts.WE9,
-			protocol.NewNewsDispatcher(hub, "we9"))
-	}
-	if cfg.GamePorts.WE9LE != 0 {
-		listen(fmt.Sprintf("%s:%d", listenOn, cfg.GamePorts.WE9LE), cfg.GamePorts.WE9LE,
-			protocol.NewNewsDispatcher(hub, "we9le"))
+	for _, gp := range cfg.GamePorts {
+		gp := gp
+		listen(fmt.Sprintf("%s:%d", listenOn, gp.Port), gp.Port,
+			protocol.NewNewsDispatcher(hub, gp.Version))
 	}
 
 	// Login service — one per game version
-	for version, port := range cfg.NetworkServer.LoginService {
-		v, p := version, port
-		listen(fmt.Sprintf("%s:%d", listenOn, p), p,
-			protocol.NewLoginDispatcher(hub, sc, v))
+	for _, ls := range cfg.NetworkServer.LoginService {
+		ls := ls
+		listen(fmt.Sprintf("%s:%d", listenOn, ls.Port), ls.Port,
+			protocol.NewLoginDispatcher(hub, sc, ls.Version), connectFilter)
 	}
 
 	// Network menu service
 	if cfg.NetworkServer.NetworkMenuService != 0 {
 		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.NetworkMenuService), cfg.NetworkServer.NetworkMenuService,
-			protocol.NewMenuDispatcher(hub, sc, "pes5"))
+			protocol.NewMenuDispatcher(hub, sc, "pes5"), connectFilter)
 	}
 
 	// Main game service
 	if cfg.NetworkServer.MainService != 0 {
 		listen(fmt.Sprintf("%s:%d", listenOn, cfg.NetworkServer.MainService), cfg.NetworkServer.MainService,
-			protocol.NewMainServiceDispatcher(hub, sc, "pes5"))
+			protocol.NewMainServiceDispatcher(hub, sc, "pes5"), connectFilter)
 	}
 
 	// ---- 7. Wait for shutdown signal -------------------------------------------
