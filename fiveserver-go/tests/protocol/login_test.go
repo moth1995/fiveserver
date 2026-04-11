@@ -16,7 +16,7 @@ func loginHub(maxUsers int) *protocol.Hub {
 		MaxUsers:   maxUsers,
 		ServerName: "Test",
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
+			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
 		},
 	})
 }

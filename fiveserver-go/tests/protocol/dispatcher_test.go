@@ -12,9 +12,8 @@ import (
 
 func newSession(hub *protocol.Hub) *protocol.Session {
 	return &protocol.Session{
-		Conn:        &protocol.ConnSender{RemoteAddr: "127.0.0.1:9999"},
-		Hub:         hub,
-		GameVersion: "pes5",
+		Conn: &protocol.ConnSender{RemoteAddr: "127.0.0.1:9999"},
+		Hub:  hub,
 	}
 }
 

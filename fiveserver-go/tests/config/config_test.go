@@ -23,8 +23,8 @@ func writeTemp(t *testing.T, content string) string {
 }
 
 func TestLoad_RealFiveserverYaml(t *testing.T) {
-	// Walk up from tests/config to find etc/conf/fiveserver.yaml
-	path := filepath.Join("..", "..", "..", "etc", "conf", "fiveserver.yaml")
+	// Walk up from tests/config to find the Go-specific config
+	path := filepath.Join("..", "..", "config", "fiveserver.yaml")
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -102,6 +102,45 @@ DB:
 	}
 	if cfg.Lobbies[1].ShowMatches {
 		t.Error("lobby[1].ShowMatches should be false")
+	}
+}
+
+func TestLoad_LobbyStructuredForm_InvalidDivisionFails(t *testing.T) {
+	yaml := writeTemp(t, `
+Lobbies:
+  - name: Broken
+    type: [A, Z]
+DB:
+  name: db
+  user: u
+  password: p
+  readServers: [127.0.0.1]
+  writeServers: [127.0.0.1]
+`)
+	_, err := config.Load(yaml)
+	if err == nil {
+		t.Fatal("Load should fail for unrecognized lobby division")
+	}
+}
+
+func TestLoad_LobbyStructuredForm_UnknownStringTypeDefaultsToOpen(t *testing.T) {
+	yaml := writeTemp(t, `
+Lobbies:
+  - name: Weird
+    type: restricted
+DB:
+  name: db
+  user: u
+  password: p
+  readServers: [127.0.0.1]
+  writeServers: [127.0.0.1]
+`)
+	cfg, err := config.Load(yaml)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Lobbies[0].TypeCode != 0x5f {
+		t.Errorf("lobby[0].TypeCode = 0x%x, want 0x5f", cfg.Lobbies[0].TypeCode)
 	}
 }
 
