@@ -1,9 +1,12 @@
 package protocol
 
 import (
+	"bytes"
+	"compress/zlib"
 	"context"
 	"encoding/binary"
 	"encoding/hex"
+	"io"
 	"log"
 	"math"
 	"time"
@@ -18,9 +21,11 @@ import (
 const cipherKey = "27501fd04e6b82c831024dac5c6305221974deb9388a21901d576cbbe2f377ef23d75486010f37819afe6c321a0146d21544ec365bf7289a"
 
 // NewLoginDispatcher returns a Dispatcher with all LoginService handlers registered.
+// Sets DefaultHandler to echo (pktID+1) with 4 zeros — mirrors Python defaultHandler.
 func NewLoginDispatcher(hub *Hub, sc *db.StorageController, version string) *Dispatcher {
 	d := NewDispatcher()
 	registerLoginHandlers(d, hub, sc, version)
+	d.DefaultHandler = echoDefaultHandler()
 	return d
 }
 
@@ -71,6 +76,10 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		var clientRosterHash []byte
 		if len(decrypted) >= 64 {
 			clientRosterHash = decrypted[48:64]
+			log.Printf("[login] %s: clientRosterHash=%x (len=%d)", s.Conn.RemoteAddr, clientRosterHash, len(clientRosterHash))
+		} else {
+			clientRosterHash = make([]byte, 16)
+			log.Printf("[login] %s: decrypted too short (%d bytes), clientRosterHash zeroed", s.Conn.RemoteAddr, len(decrypted))
 		}
 
 		// User hash is the hex of pkt.Data[32:48] (raw, before decryption)
@@ -107,15 +116,23 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
 		log.Printf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
-		// Ensure exactly 3 profile slots
-		for len(profiles) < 3 {
-			profiles = append(profiles, &model.Profile{Ordinal: len(profiles)})
+		// Place profiles into fixed 3-slot array by ordinal — mirrors Python getUser().
+		slots := make([]*model.Profile, 3)
+		for _, p := range profiles {
+			if p.Ordinal >= 0 && p.Ordinal < 3 {
+				slots[p.Ordinal] = p
+			}
 		}
+		for i := range slots {
+			if slots[i] == nil {
+				slots[i] = &model.Profile{Ordinal: i, UserID: u.ID}
+			}
+		}
+		profiles = slots
 
 		s.User = &model.ConnectedUser{
 			User:        u,
 			Profiles:    profiles,
-			GameVersion: version,
 			LobbyIndex:  -1,
 			Info:        &model.UserInfo{GameName: version},
 			ConnectedAt: time.Now(),
@@ -336,16 +353,26 @@ func handleAskForSettings(hub *Hub, sc *db.StorageController) HandlerFunc {
 			return s.Conn.SendData(0x3087, pack32(0xfffffedd))
 		}
 
+		// Decompress stored blobs — mirrors Python askForSettings_308a: zlib.decompress(settings.settingsN).
+		blob1, err := zlibDecompress(settings.Settings1)
+		if err != nil {
+			log.Printf("[login] settings decompress blob1 failed: %v", err)
+			return s.Conn.SendData(0x3087, pack32(0xfffffedd))
+		}
+		blob2, err := zlibDecompress(settings.Settings2)
+		if err != nil {
+			log.Printf("[login] settings decompress blob2 failed: %v", err)
+			return s.Conn.SendData(0x3087, pack32(0xfffffedd))
+		}
 		// Send profile ID confirmation
 		resp := append(pack32(0), pack32i(int32(s.User.Profile.ID))...)
 		if err := s.Conn.SendData(0x3087, resp); err != nil {
 			return err
 		}
-		// Send both settings blobs (already stored compressed)
-		if err := s.Conn.SendData(0x3088, settings.Settings1); err != nil {
+		if err := s.Conn.SendData(0x3088, blob1); err != nil {
 			return err
 		}
-		if err := s.Conn.SendData(0x3088, settings.Settings2); err != nil {
+		if err := s.Conn.SendData(0x3088, blob2); err != nil {
 			return err
 		}
 		return s.Conn.SendZeros(0x3089, 0)
@@ -368,15 +395,17 @@ func handleDo3087() HandlerFunc {
 }
 
 func handleDo3088() HandlerFunc {
-	// Settings update — store compressed blob on profile in memory
+	// Settings update — compress blob with zlib before storing in memory.
+	// Mirrors Python do_3088: settings1/settings2 = zlib.compress(pkt.data).
 	return func(s *Session, pkt Packet) error {
 		if s.User == nil || s.User.Profile == nil || len(pkt.Data) < 3 {
 			return nil
 		}
+		compressed := zlibCompress(pkt.Data)
 		if pkt.Data[2] == 3 {
-			s.User.Profile.Settings.Settings1 = append([]byte(nil), pkt.Data...)
+			s.User.Profile.Settings.Settings1 = compressed
 		} else {
-			s.User.Profile.Settings.Settings2 = append([]byte(nil), pkt.Data...)
+			s.User.Profile.Settings.Settings2 = compressed
 		}
 		return nil
 	}
@@ -424,6 +453,25 @@ func handleDisconnect(hub *Hub) HandlerFunc {
 
 // ---- helpers ----------------------------------------------------------------
 
+// zlibCompress compresses data using zlib. Mirrors Python zlib.compress(data).
+func zlibCompress(data []byte) []byte {
+	var buf bytes.Buffer
+	w := zlib.NewWriter(&buf)
+	_, _ = w.Write(data)
+	_ = w.Close()
+	return buf.Bytes()
+}
+
+// zlibDecompress decompresses a zlib-compressed blob. Mirrors Python zlib.decompress(data).
+func zlibDecompress(data []byte) ([]byte, error) {
+	r, err := zlib.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	return io.ReadAll(r)
+}
+
 func pack32(v uint32) []byte {
 	b := make([]byte, 4)
 	binary.BigEndian.PutUint32(b, v)
@@ -466,4 +514,3 @@ func getPoints(wins, losses, draws int) int {
 	score := 0.56 + 0.44*perf*perf + 0.56*(-math.Exp(-float64(numGames)*0.05))
 	return int(1000 * score)
 }
-

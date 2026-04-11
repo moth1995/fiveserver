@@ -363,9 +363,11 @@ func handleChallenge4320(hub *Hub, sc *db.StorageController) HandlerFunc {
 			return s.Conn.SendData(0x4321, []byte{0, 0, 0, 1})
 		}
 
-		// Check game version compatibility
+		// Check game version compatibility — mirrors Python isSameGame:
+		// the in-game version byte from 0x4200 must match between players.
 		if room.Owner.GameVersion != s.User.GameVersion {
-			log.Printf("[main] INFO: Game version mismatch. Match CANCELLED.")
+			log.Printf("[main] INFO: Game version mismatch (%d vs %d). Match CANCELLED.",
+				room.Owner.GameVersion, s.User.GameVersion)
 			return s.Conn.SendData(0x4321, []byte{0, 0, 0, 1})
 		}
 
@@ -673,7 +675,13 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 			return nil
 		}
 
-		// Recompute points for both profiles
+		// Gap 2: compute match duration for SecondsPlayed accounting
+		var matchDuration int64
+		if !match.StartTime.IsZero() {
+			matchDuration = int64(time.Since(match.StartTime).Seconds())
+		}
+
+		// Recompute points and accumulate seconds_played for both profiles
 		for _, profileID := range []int{match.HomeProfileID, match.AwayProfileID} {
 			p, err := db.GetProfileByID(ctx, sc, profileID)
 			if err != nil {
@@ -684,8 +692,15 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 				continue
 			}
 			p.Points = getPoints(stats.Wins, stats.Losses, stats.Draws)
+			p.SecondsPlayed += matchDuration
 			_ = db.UpdateProfileStats(ctx, sc, p)
 		}
+		// Gap 3: recompute rank column asynchronously after each match
+		go func() {
+			if err := db.ComputeRanks(context.Background(), sc); err != nil {
+				log.Printf("[main] ComputeRanks failed: %v", err)
+			}
+		}()
 		return nil
 	}
 }
@@ -790,8 +805,9 @@ func applyDisconnectPenalty(hub *Hub, sc *db.StorageController, s *Session) {
 
 // encodeRoomUpdate builds the 0x4306 room-info wire payload.
 // Both cases use 11 bytes per player slot (mirrors Python exactly):
-//   withTeams=false: [4 profileID][7 zeros]       (room creation / challenge)
-//   withTeams=true:  [4 profileID][2 teamID][5 zeros]  (exit / cancel challenge)
+//
+//	withTeams=false: [4 profileID][7 zeros]       (room creation / challenge)
+//	withTeams=true:  [4 profileID][2 teamID][5 zeros]  (exit / cancel challenge)
 //
 // Layout:
 //
