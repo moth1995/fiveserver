@@ -22,7 +22,7 @@ type Config struct {
 	ListenOn             string              `yaml:"ListenOn"`
 	IpDetectUri          string              `yaml:"IpDetectUri"`
 	Lobbies              []Lobby             `yaml:"Lobbies"`
-	GamePorts            GamePorts           `yaml:"GamePorts"`
+	GamePorts            []GamePortEntry     `yaml:"GamePorts"`
 	NetworkServer        NetworkServerConfig `yaml:"NetworkServer"`
 	WebInterface         WebInterfaceConfig  `yaml:"WebInterface"`
 	Debug                bool                `yaml:"Debug"`
@@ -37,6 +37,10 @@ type Config struct {
 	ServerName           string              `yaml:"ServerName"`
 	Greeting             GreetingConfig      `yaml:"Greeting"`
 	MaxUsers             int                 `yaml:"MaxUsers"`
+	// NewFeatures maps game-version strings ("pes5", "we9", "we9le") to an
+	// additional 0x200a announcement sent after the greeting.
+	// Mirrors Python NEW_FEATURES dict in protocol/pes5.py.
+	NewFeatures map[string]NewFeatureEntry `yaml:"NewFeatures"`
 
 	// runtime-only: parsed banned list entries (net, mask) in host byte order
 	fastBanned []bannedEntry
@@ -93,44 +97,54 @@ func (l *Lobby) UnmarshalYAML(value *yaml.Node) error {
 			for _, v := range t {
 				l.TypeList = append(l.TypeList, fmt.Sprintf("%v", v))
 			}
-			l.Type = "restricted"
 		}
 	default:
 		return fmt.Errorf("config: unexpected lobby YAML node kind %v", value.Kind)
 	}
-	l.TypeCode = lobbyTypeCode(l.Type, l.TypeList)
+	typeCode, err := lobbyTypeCode(l.Type, l.TypeList)
+	if err != nil {
+		return err
+	}
+	l.TypeCode = typeCode
 	return nil
 }
 
 // lobbyTypeCode matches Python FiveServerConfig.__init__ lobby-type logic.
-func lobbyTypeCode(typ string, list []string) byte {
-	switch typ {
-	case "noStats":
-		return 0x20
-	case "restricted":
+func lobbyTypeCode(typ string, list []string) (byte, error) {
+	if len(list) > 0 {
 		divMap := map[string]int{"A": 0, "3B": 1, "3A": 2, "2": 3, "1": 4}
 		code := 0
 		for _, d := range list {
-			if v, ok := divMap[d]; ok {
-				code += 1 << v
+			v, ok := divMap[d]
+			if !ok {
+				return 0, fmt.Errorf("config: invalid lobby type definition: unrecognized division %q", d)
 			}
+			code += 1 << v
 		}
-		return byte(code)
+		return byte(code), nil
+	}
+
+	switch typ {
+	case "noStats":
+		return 0x20, nil
+	case "open":
+		return 0x5f, nil
 	default: // "open" or anything else
-		return 0x5f
+		return 0x5f, nil
 	}
 }
 
-type GamePorts struct {
-	PES5  int `yaml:"pes5"`
-	WE9   int `yaml:"we9"`
-	WE9LE int `yaml:"we9le"`
+// GamePortEntry associates a TCP port number with a game-version label.
+// Used for both GamePorts (news/greeting) and LoginService entries.
+type GamePortEntry struct {
+	Port    int    `yaml:"port"`
+	Version string `yaml:"version"`
 }
 
 type NetworkServerConfig struct {
-	MainService        int            `yaml:"mainService"`
-	NetworkMenuService int            `yaml:"networkMenuService"`
-	LoginService       map[string]int `yaml:"loginService"`
+	MainService        int             `yaml:"mainService"`
+	NetworkMenuService int             `yaml:"networkMenuService"`
+	LoginService       []GamePortEntry `yaml:"loginService"`
 }
 
 type WebInterfaceConfig struct {
@@ -184,6 +198,13 @@ type DisconnectsConfig struct {
 
 type GreetingConfig struct {
 	Text string `yaml:"text"`
+}
+
+// NewFeatureEntry is one entry in the NewFeatures map.
+// Mirrors one element of the Python NEW_FEATURES dict.
+type NewFeatureEntry struct {
+	Title string `yaml:"title"`
+	Text  string `yaml:"text"`
 }
 
 // ---- banned list ------------------------------------------------------------
