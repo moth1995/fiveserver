@@ -66,7 +66,11 @@ func (c *Conn) SendZeros(id uint16, length int) error {
 // Serve blocks until the listener is closed. Pass a channel that is closed
 // on shutdown via the stopCh parameter; pass nil to run forever.
 // When debug is true each packet's hex dump is logged (matches Python Debug flag).
-func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bool) error {
+//
+// filter (optional) is called with the raw "host:port" remote address immediately
+// after accept. If it returns a non-nil error the connection is rejected and
+// closed. Mirrors Python ConnectFilter / IsBanned + AtCapacity checks.
+func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bool, filter ...func(string) error) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("server: listen %s: %w", addr, err)
@@ -78,6 +82,11 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bo
 			<-stopCh
 			ln.Close()
 		}()
+	}
+
+	var connectFilter func(string) error
+	if len(filter) > 0 {
+		connectFilter = filter[0]
 	}
 
 	for {
@@ -92,13 +101,21 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bo
 			packetCount: 1,
 		}
 		log.Printf("[tcp] connection accepted from %s", conn.RemoteAddr)
-		go serveConn(conn, d, debug)
+		go serveConn(conn, d, debug, connectFilter)
 	}
 }
 
 // serveConn builds a Session+ConnSender for one accepted connection and runs
 // the packet read loop, dispatching every packet through d.
-func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool) {
+func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(string) error) {
+	// Check connect filter (ban / capacity) before allocating any resources.
+	if filter != nil {
+		if err := filter(conn.RemoteAddr); err != nil {
+			log.Printf("[tcp] %s: connection rejected: %v", conn.RemoteAddr, err)
+			conn.Close()
+			return
+		}
+	}
 	// ConnSender shim: bridges server.Conn to protocol.Session without an
 	// import cycle (protocol cannot import server).
 	cs := &protocol.ConnSender{

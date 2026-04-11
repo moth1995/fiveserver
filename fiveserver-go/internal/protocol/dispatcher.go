@@ -32,10 +32,11 @@ func (c *ConnSender) Close()                                { c.CloseFn() }
 type HandlerFunc func(s *Session, pkt Packet) error
 
 // Dispatcher maps packet IDs to HandlerFuncs.
-// Mirrors Python PacketDispatcher: unknown packets are silently dropped
-// (defaultHandler does nothing).
+// Mirrors Python PacketDispatcher: unknown packets call DefaultHandler if set,
+// otherwise they are logged and dropped.
 type Dispatcher struct {
-	handlers map[uint16]HandlerFunc
+	handlers       map[uint16]HandlerFunc
+	DefaultHandler HandlerFunc // called for any unregistered packet ID (may be nil)
 }
 
 func NewDispatcher() *Dispatcher {
@@ -47,14 +48,28 @@ func (d *Dispatcher) Register(id uint16, h HandlerFunc) {
 	d.handlers[id] = h
 }
 
-// Dispatch calls the handler for pkt.Header.ID. Unknown IDs are logged and dropped.
+// Dispatch calls the handler for pkt.Header.ID.
+// If no handler is registered, DefaultHandler is called if set; otherwise the
+// packet is logged and dropped. Mirrors Python PacketDispatcher.defaultHandler.
 func (d *Dispatcher) Dispatch(s *Session, pkt Packet) error {
 	h, ok := d.handlers[pkt.Header.ID]
 	if !ok {
+		if d.DefaultHandler != nil {
+			return d.DefaultHandler(s, pkt)
+		}
 		log.Printf("[dispatch] %s: no handler for pkt 0x%04x — dropping", s.Conn.RemoteAddr, pkt.Header.ID)
 		return nil
 	}
 	return h(s, pkt)
+}
+
+// echoDefaultHandler returns a HandlerFunc that mirrors Python PacketDispatcher.defaultHandler:
+// responds with (pktID + 1) and 4 zero bytes for any unregistered packet.
+func echoDefaultHandler() HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		log.Printf("[dispatch] %s: default echo for pkt 0x%04x", s.Conn.RemoteAddr, pkt.Header.ID)
+		return s.Conn.SendData(pkt.Header.ID+1, []byte{0, 0, 0, 0})
+	}
 }
 
 // ---- Session ----------------------------------------------------------------
@@ -63,12 +78,11 @@ func (d *Dispatcher) Dispatch(s *Session, pkt Packet) error {
 // Created by the server layer on each accepted connection; destroyed when the
 // connection closes.
 type Session struct {
-	Conn        *ConnSender
-	User        *model.ConnectedUser // nil until 0x3003 authenticate succeeds
-	Dispatcher  *Dispatcher
-	Hub         *Hub
-	GameVersion string // "pes5", "we9", "we9le"
-	OnClose     func() // called by server layer when the connection closes (may be nil)
+	Conn       *ConnSender
+	User       *model.ConnectedUser // nil until 0x3003 authenticate succeeds
+	Dispatcher *Dispatcher
+	Hub        *Hub
+	OnClose    func() // called by server layer when the connection closes (may be nil)
 }
 
 // ---- Hub --------------------------------------------------------------------
@@ -81,29 +95,42 @@ type MatchState struct {
 	Started time.Time
 }
 
+// offlineGracePeriod is the delay after a disconnect before a user is considered
+// truly offline. Allows port-transition reconnects without resetting online time.
+const offlineGracePeriod = 5 * time.Second
+
 // Hub holds server-wide shared state: online sessions, configuration, and lobbies.
 // All exported methods are thread-safe.
 //
 // Two separate maps mirror the Python architecture:
-//   byHash    — keyed by user.Hash, populated at 0x3003 authentication.
-//               Used for the "already online" check (matches Python onlineUsers).
-//   byProfile — keyed by profile.Name, populated at 0x4100 profile selection.
-//               Used for message routing / sendToUser (matches Python lobbyConnection).
+//
+//	byHash    — keyed by user.Hash, populated at 0x3003 authentication.
+//	            Used for the "already online" check (matches Python onlineUsers).
+//	byProfile — keyed by profile.Name, populated at 0x4100 profile selection.
+//	            Used for message routing / sendToUser (matches Python lobbyConnection).
+//
+// onlineSince tracks the original connect time per user hash across port
+// transitions. offlineTimers debounces UserOffline so brief reconnects
+// (e.g. news→login→menu→main) don't reset the online clock.
 type Hub struct {
-	mu        sync.RWMutex
-	byHash    map[string]*Session      // key: user.Hash  (set at login)
-	byProfile map[string]*Session      // key: profile.Name (set at profile select)
-	matches   map[*Session]*MatchState // key: home session
-	cfg       *config.Config
-	lobbies   []*model.Lobby // live lobby instances initialised from cfg.Lobbies
+	mu            sync.RWMutex
+	byHash        map[string]*Session      // key: user.Hash  (set at login)
+	byProfile     map[string]*Session      // key: profile.Name (set at profile select)
+	matches       map[*Session]*MatchState // key: home session
+	cfg           *config.Config
+	lobbies       []*model.Lobby         // live lobby instances initialised from cfg.Lobbies
+	onlineSince   map[string]time.Time   // hash → original connect time (persists across port transitions)
+	offlineTimers map[string]*time.Timer // hash → pending offline-cleanup timer
 }
 
 func NewHub(cfg *config.Config) *Hub {
 	h := &Hub{
-		byHash:    make(map[string]*Session),
-		byProfile: make(map[string]*Session),
-		matches:   make(map[*Session]*MatchState),
-		cfg:       cfg,
+		byHash:        make(map[string]*Session),
+		byProfile:     make(map[string]*Session),
+		matches:       make(map[*Session]*MatchState),
+		cfg:           cfg,
+		onlineSince:   make(map[string]time.Time),
+		offlineTimers: make(map[string]*time.Timer),
 	}
 	for i, lc := range cfg.Lobbies {
 		l := model.NewLobby(lc.Name, cfg.MaxUsers)
@@ -174,41 +201,67 @@ func (h *Hub) Config() *config.Config { return h.cfg }
 // ---- online tracking (byHash) -----------------------------------------------
 
 // UserOnline marks a user as online after successful authentication (0x3003).
-// If the user is already tracked (reconnecting on a new port), the original
-// ConnectedAt is preserved so the online timer doesn't reset.
+// Cancels any pending offline timer for this hash (port transition reconnect).
+// Preserves the original ConnectedAt from onlineSince so the online clock
+// never resets across port transitions.
 // Mirrors Python FiveServerFactory.userOnline(usr).
 func (h *Hub) UserOnline(s *Session) {
 	if s.User == nil {
 		return
 	}
+	hash := s.User.User.Hash
 	h.mu.Lock()
-	if prev, ok := h.byHash[s.User.User.Hash]; ok && prev.User != nil && !prev.User.ConnectedAt.IsZero() {
-		s.User.ConnectedAt = prev.User.ConnectedAt
+	// Cancel any pending offline cleanup — user reconnected within grace period.
+	if t, ok := h.offlineTimers[hash]; ok {
+		t.Stop()
+		delete(h.offlineTimers, hash)
 	}
-	h.byHash[s.User.User.Hash] = s
+	// Preserve original connect time across port transitions.
+	if since, ok := h.onlineSince[hash]; ok {
+		s.User.ConnectedAt = since
+	} else {
+		h.onlineSince[hash] = s.User.ConnectedAt
+	}
+	h.byHash[hash] = s
 	h.mu.Unlock()
 	log.Printf("[hub] UserOnline {id=%d} addr=%s", s.User.User.ID, s.Conn.RemoteAddr)
 }
 
-// UserOffline removes a user from both maps.
-// No pointer check on byHash — mirrors Python's try/del which just removes by key.
-// Uses pointer check on byProfile to avoid evicting a newer session.
+// UserOffline removes a user from byHash and byProfile, then starts a
+// grace-period timer. If the user reconnects (port transition) before the
+// timer fires, UserOnline will cancel it and onlineSince is kept intact.
+// Only after offlineGracePeriod with no reconnect is onlineSince cleaned up.
 // Mirrors Python FiveServerFactory.userOffline(usr).
 func (h *Hub) UserOffline(s *Session) {
 	if s.User == nil {
 		return
 	}
+	hash := s.User.User.Hash
 	name := ""
 	if s.User.Profile != nil {
 		name = s.User.Profile.Name
 	}
 	h.mu.Lock()
-	delete(h.byHash, s.User.User.Hash)
+	delete(h.byHash, hash)
 	if s.User.Profile != nil {
 		if current, ok := h.byProfile[name]; ok && current == s {
 			delete(h.byProfile, name)
 		}
 	}
+	// Cancel any previous offline timer before starting a new one.
+	if t, ok := h.offlineTimers[hash]; ok {
+		t.Stop()
+	}
+	// After the grace period, clean up onlineSince if the user is still absent.
+	h.offlineTimers[hash] = time.AfterFunc(offlineGracePeriod, func() {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		if _, online := h.byHash[hash]; !online {
+			delete(h.onlineSince, hash)
+			log.Printf("[hub] user hash=%s confirmed offline (grace period elapsed)", hash)
+		}
+		delete(h.offlineTimers, hash)
+	})
 	h.mu.Unlock()
 	log.Printf("[hub] UserOffline {%s} addr=%s", name, s.Conn.RemoteAddr)
 }
@@ -304,21 +357,29 @@ func (h *Hub) AtCapacity() bool {
 	return h.OnlineCount() >= h.cfg.MaxUsers
 }
 
-// KickSession removes a user from both maps immediately and closes the TCP
-// connection. Removing from the hub first ensures the "already online" guard
-// clears even if the OnClose hook fires after a reconnect attempt.
+// KickSession removes a user from all maps immediately and closes the TCP
+// connection. Clears onlineSince and any pending offline timer right away
+// since a kick is an authoritative logout, not a port transition.
+// Removing from the hub first ensures the "already online" guard clears
+// even if the OnClose hook fires after a reconnect attempt.
 func (h *Hub) KickSession(s *Session) {
 	if s.User == nil {
 		s.Conn.Close()
 		return
 	}
+	hash := s.User.User.Hash
 	h.mu.Lock()
-	delete(h.byHash, s.User.User.Hash)
+	delete(h.byHash, hash)
 	if s.User.Profile != nil {
 		if current, ok := h.byProfile[s.User.Profile.Name]; ok && current == s {
 			delete(h.byProfile, s.User.Profile.Name)
 		}
 	}
+	if t, ok := h.offlineTimers[hash]; ok {
+		t.Stop()
+		delete(h.offlineTimers, hash)
+	}
+	delete(h.onlineSince, hash)
 	h.mu.Unlock()
 	s.Conn.Close()
 }
