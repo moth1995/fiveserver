@@ -23,13 +23,13 @@ type Profile struct {
 // Replaces the Python User instance that lived on the protocol connection.
 // Conn is stored as interface{} to avoid an import cycle with the server package.
 type ConnectedUser struct {
-	User        *User
-	Profile     *Profile   // nil until a profile is selected (0x3040)
-	Profiles    []*Profile // all profiles for this user (loaded at login)
-	GameVersion string     // "pes5", "we9", "we9le"
-	LobbyIndex  int        // -1 when not in a lobby
-	Conn        interface{} // *server.Conn
-	Info        *UserInfo
+	User                 *User
+	Profile              *Profile    // nil until a profile is selected (0x3040)
+	Profiles             []*Profile  // all profiles for this user (loaded at login)
+	GameVersion          byte        // byte from 0x4200 packet; must match opponent's for a challenge
+	LobbyIndex           int         // -1 when not in a lobby
+	Conn                 interface{} // *server.Conn
+	Info                 *UserInfo
 	NeedsLobbyChatReplay bool
 	State                *NetworkState // nil until selectLobby (0x4202)
 	ConnectedAt          time.Time     // time of successful 0x3003 authentication

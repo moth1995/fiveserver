@@ -53,8 +53,8 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 			return nil
 		}
 		s.User.Profile = s.User.Profiles[profileIndex]
-		s.User.Conn = s.Conn   // wire current connection so sendToUser fallback works
-		hub.AddSession(s)      // register session now that profile is known
+		s.User.Conn = s.Conn // wire current connection so sendToUser fallback works
+		hub.AddSession(s)    // register session now that profile is known
 
 		// Run full disconnect cleanup when the TCP connection closes (including
 		// forced closes from the admin kick endpoint — those never send 0x0003).
@@ -70,7 +70,7 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		data = append(data, pack32i(int32(s.User.Profile.ID))...)
 		flags := []byte{
 			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x80, // \xff*7 + \x80
-			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,        // 7 of \xff*15
+			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // 7 of \xff*15
 			0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xc0, // remaining 8 + \xc0
 			0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x02, 0x01, 0x00,
 		}
@@ -147,6 +147,10 @@ func handleSetFavPlayer4114(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 func handleGetLobbies4200(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
+		// Store the game version byte so it can be compared in isSameGame (0x4320).
+		if s.User != nil && len(pkt.Data) >= 1 {
+			s.User.GameVersion = pkt.Data[0]
+		}
 		lobbies := hub.Lobbies()
 		// [2 bytes count big-endian][35 bytes × count]
 		data := make([]byte, 2)
@@ -545,9 +549,9 @@ func formatProfileInfo(p *model.Profile, s *model.Stats, showStats bool) []byte 
 	b = append(b, byte(s.StreakCurrent>>8), byte(s.StreakCurrent))
 	b = append(b, byte(s.StreakBest>>8), byte(s.StreakBest))
 	b = append(b, byte(p.Disconnects>>8), byte(p.Disconnects))
-	b = append(b, 0, 0)                                         // PAD1
+	b = append(b, 0, 0) // PAD1
 	b = append(b, byte(s.GoalsScored>>8), byte(s.GoalsScored))
-	b = append(b, 0, 0)                                         // PAD2
+	b = append(b, 0, 0) // PAD2
 	b = append(b, byte(s.GoalsAllowed>>8), byte(s.GoalsAllowed))
 	b = append(b, byte(p.FavTeam>>8), byte(p.FavTeam))
 	b = append(b, pack32i(int32(p.FavPlayer))...)

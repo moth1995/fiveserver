@@ -188,3 +188,46 @@ func StoreProfileSettings(ctx context.Context, sc *StorageController, profileID 
 	}
 	return nil
 }
+
+// ComputeRanks recomputes the rank column for all non-deleted profiles ordered by
+// points DESC, seconds_played DESC (rank 1 = most points). Runs in a single
+// transaction so no partial updates are visible. Mirrors Python ProfileData._computeRanksTxn.
+func ComputeRanks(ctx context.Context, sc *StorageController) error {
+	if sc == nil {
+		return ErrNoDB
+	}
+	tx, err := sc.Write.DB().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db/profile: compute ranks begin tx: %w", err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id FROM profiles WHERE deleted=0 ORDER BY points DESC, seconds_played DESC`)
+	if err != nil {
+		return fmt.Errorf("db/profile: compute ranks query: %w", err)
+	}
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			rows.Close() //nolint:errcheck
+			return fmt.Errorf("db/profile: compute ranks scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close() //nolint:errcheck
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("db/profile: compute ranks iterate: %w", err)
+	}
+
+	for i, id := range ids {
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE profiles SET `rank`=? WHERE id=?",
+			i+1, id,
+		); err != nil {
+			return fmt.Errorf("db/profile: compute ranks update rank %d: %w", i+1, err)
+		}
+	}
+	return tx.Commit()
+}

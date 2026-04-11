@@ -84,7 +84,7 @@ func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 		Username      string `json:"username"`
 		Lobby         string `json:"lobby"`
 		Addr          string `json:"addr"`
-		GameVersion   string `json:"game_version"`
+		GameVersion   byte   `json:"game_version"`
 		OnlineSeconds int    `json:"online_seconds"`
 	}
 
