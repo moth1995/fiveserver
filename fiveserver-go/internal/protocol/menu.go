@@ -3,7 +3,7 @@ package protocol
 import (
 	"context"
 	"encoding/binary"
-	"log"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"strings"
 	"time"
 
@@ -59,7 +59,7 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		// Run full disconnect cleanup when the TCP connection closes (including
 		// forced closes from the admin kick endpoint — those never send 0x0003).
 		s.OnClose = func() {
-			log.Printf("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
+			logger.Infof("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
 			exitLobbyAndNotify(hub, s)
 			hub.UserOffline(s)
 		}
@@ -191,10 +191,10 @@ func handleSelectLobby4202(hub *Hub, sc *db.StorageController) HandlerFunc {
 
 		lobby, ok := hub.GetLobby(lobbyID)
 		if !ok {
-			log.Printf("[menu] %s: unknown lobby id %d", s.Conn.RemoteAddr, lobbyID)
+			logger.Warnf("[menu] %s: unknown lobby id %d", s.Conn.RemoteAddr, lobbyID)
 			return nil
 		}
-		log.Printf("[menu] User {%s} entering lobby %d (%s)", s.User.Profile.Name, lobbyID+1, lobby.Name)
+		logger.Infof("[menu] User {%s} entering lobby %d (%s)", s.User.Profile.Name, lobbyID+1, lobby.Name)
 		lobby.Enter(s.User)
 
 		// Notify all lobby members of the new user joining
@@ -334,7 +334,7 @@ func handleQuickMatchSearch4a00(hub *Hub) HandlerFunc {
 			return err
 		}
 		if s.User != nil && s.User.Profile != nil {
-			log.Printf("[menu] User {%s} exiting lobby %d (quick match search)", s.User.Profile.Name, s.User.LobbyIndex+1)
+			logger.Infof("[menu] User {%s} exiting lobby %d (quick match search)", s.User.Profile.Name, s.User.LobbyIndex+1)
 		}
 		exitLobbyAndNotify(hub, s)
 		return nil
@@ -347,7 +347,7 @@ func handleQuickMatchSearch4a00(hub *Hub) HandlerFunc {
 func handleMenuDisconnect(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		if s.User != nil && s.User.Profile != nil {
-			log.Printf("[menu] User {%s} exiting lobby %d (disconnect)", s.User.Profile.Name, s.User.LobbyIndex+1)
+			logger.Infof("[menu] User {%s} exiting lobby %d (disconnect)", s.User.Profile.Name, s.User.LobbyIndex+1)
 		}
 		// Clear OnClose so the serveConn defer does not run cleanup a second time
 		// after this graceful 0x0003 handler already did it.
@@ -570,9 +570,9 @@ func sendToUser(hub *Hub, u *model.ConnectedUser, id uint16, data []byte) {
 	}
 	if u.Profile != nil {
 		if sess, ok := hub.GetSession(u.Profile.Name); ok {
-			log.Printf("[sendToUser] {%s} pkt=0x%04x — via hub session (addr=%s)", name, id, sess.Conn.RemoteAddr)
+			logger.Debugf("[sendToUser] {%s} pkt=0x%04x — via hub session (addr=%s)", name, id, sess.Conn.RemoteAddr)
 			if err := sess.Conn.SendData(id, data); err != nil {
-				log.Printf("[sendToUser] {%s} pkt=0x%04x — hub send error: %v", name, id, err)
+				logger.Warnf("[sendToUser] {%s} pkt=0x%04x — hub send error: %v", name, id, err)
 			}
 			return
 		}
@@ -580,14 +580,14 @@ func sendToUser(hub *Hub, u *model.ConnectedUser, id uint16, data []byte) {
 	// fallback: direct conn (set by server layer)
 	if u.Conn != nil {
 		if cs, ok := u.Conn.(*ConnSender); ok {
-			log.Printf("[sendToUser] {%s} pkt=0x%04x — via direct conn (addr=%s)", name, id, cs.RemoteAddr)
+			logger.Debugf("[sendToUser] {%s} pkt=0x%04x — via direct conn (addr=%s)", name, id, cs.RemoteAddr)
 			if err := cs.SendData(id, data); err != nil {
-				log.Printf("[sendToUser] {%s} pkt=0x%04x — direct send error: %v", name, id, err)
+				logger.Warnf("[sendToUser] {%s} pkt=0x%04x — direct send error: %v", name, id, err)
 			}
 			return
 		}
 	}
-	log.Printf("[sendToUser] {%s} pkt=0x%04x — no route found (hub miss, no conn)", name, id)
+	logger.Warnf("[sendToUser] {%s} pkt=0x%04x — no route found (hub miss, no conn)", name, id)
 }
 
 // ---- exitLobbyAndNotify -----------------------------------------------------

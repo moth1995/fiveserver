@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/fiveserver/fiveserver-go/internal/crypto"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 )
 
@@ -43,7 +43,7 @@ func (c *Conn) Send(pkt protocol.Packet) error {
 
 // SendData builds a Packet from id + data and calls Send.
 func (c *Conn) SendData(id uint16, data []byte) error {
-	log.Printf("[tcp] %s: send pkt 0x%04x len=%d", c.RemoteAddr, id, len(data))
+	logger.Debugf("[tcp] %s: send pkt 0x%04x len=%d", c.RemoteAddr, id, len(data))
 	return c.Send(protocol.Packet{
 		Header: protocol.Header{
 			ID:          id,
@@ -100,7 +100,7 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bo
 			RemoteAddr:  raw.RemoteAddr().String(),
 			packetCount: 1,
 		}
-		log.Printf("[tcp] connection accepted from %s", conn.RemoteAddr)
+		logger.Infof("[tcp] connection accepted from %s", conn.RemoteAddr)
 		go serveConn(conn, d, debug, connectFilter)
 	}
 }
@@ -111,7 +111,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 	// Check connect filter (ban / capacity) before allocating any resources.
 	if filter != nil {
 		if err := filter(conn.RemoteAddr); err != nil {
-			log.Printf("[tcp] %s: connection rejected: %v", conn.RemoteAddr, err)
+			logger.Infof("[tcp] %s: connection rejected: %v", conn.RemoteAddr, err)
 			conn.Close()
 			return
 		}
@@ -131,7 +131,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 	}
 
 	defer func() {
-		log.Printf("[tcp] connection closed: %s", conn.RemoteAddr)
+		logger.Infof("[tcp] connection closed: %s", conn.RemoteAddr)
 		conn.Close()
 		if s.OnClose != nil {
 			s.OnClose()
@@ -145,7 +145,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 		cs.SendDataFn = func(id uint16, data []byte) error {
 			username := sessionUsername(s)
 			count := atomic.LoadUint32(&conn.packetCount)
-			log.Printf("[SEND {%s}]: %s", username, formatPacket(id, uint16(len(data)), count, data))
+			logger.Debugf("[SEND {%s}]: %s", username, formatPacket(id, uint16(len(data)), count, data))
 			return origSend(id, data)
 		}
 	}
@@ -157,7 +157,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 		n, err := conn.Conn.Read(tmp)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
-				log.Printf("[tcp] %s: read error: %v", conn.RemoteAddr, err)
+				logger.Warnf("[tcp] %s: read error: %v", conn.RemoteAddr, err)
 			}
 			return
 		}
@@ -172,13 +172,13 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 			hdrBytes := crypto.XorData(buf[:8], 0)
 			hdr, err := protocol.UnmarshalHeader(hdrBytes)
 			if err != nil {
-				log.Printf("[tcp] %s: bad header: %v", conn.RemoteAddr, err)
+				logger.Warnf("[tcp] %s: bad header: %v", conn.RemoteAddr, err)
 				return
 			}
 
 			total := int(hdr.Length) + 24
 			if total > 65536 {
-				log.Printf("[tcp] %s: pkt 0x%04x: absurd length %d — closing", conn.RemoteAddr, hdr.ID, hdr.Length)
+				logger.Warnf("[tcp] %s: pkt 0x%04x: absurd length %d — closing", conn.RemoteAddr, hdr.ID, hdr.Length)
 				return
 			}
 			if len(buf) < total {
@@ -195,14 +195,14 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 
 			pkt, err := protocol.Unmarshal(full)
 			if err != nil {
-				log.Printf("[tcp] %s: unmarshal error: %v", conn.RemoteAddr, err)
+				logger.Warnf("[tcp] %s: unmarshal error: %v", conn.RemoteAddr, err)
 				return
 			}
 
-			log.Printf("[tcp] %s: recv pkt 0x%04x len=%d", conn.RemoteAddr, pkt.Header.ID, pkt.Header.Length)
+			logger.Debugf("[tcp] %s: recv pkt 0x%04x len=%d", conn.RemoteAddr, pkt.Header.ID, pkt.Header.Length)
 			if debug {
 				username := sessionUsername(s)
-				log.Printf("[RECV {%s}]: %s", username, formatPacket(pkt.Header.ID, pkt.Header.Length, pkt.Header.PacketCount, pkt.Data))
+				logger.Debugf("[RECV {%s}]: %s", username, formatPacket(pkt.Header.ID, pkt.Header.Length, pkt.Header.PacketCount, pkt.Data))
 			}
 
 			// Heartbeat: echo back, no dispatch
@@ -213,7 +213,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 			}
 
 			if err := d.Dispatch(s, pkt); err != nil {
-				log.Printf("[tcp] %s: dispatch 0x%04x error: %v", conn.RemoteAddr, pkt.Header.ID, err)
+				logger.Errorf("[tcp] %s: dispatch 0x%04x error: %v", conn.RemoteAddr, pkt.Header.ID, err)
 			}
 		}
 	}

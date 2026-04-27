@@ -1,11 +1,11 @@
 package protocol
 
 import (
-	"log"
 	"sync"
 	"time"
 
 	"github.com/fiveserver/fiveserver-go/internal/config"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"github.com/fiveserver/fiveserver-go/internal/model"
 )
 
@@ -57,7 +57,7 @@ func (d *Dispatcher) Dispatch(s *Session, pkt Packet) error {
 		if d.DefaultHandler != nil {
 			return d.DefaultHandler(s, pkt)
 		}
-		log.Printf("[dispatch] %s: no handler for pkt 0x%04x — dropping", s.Conn.RemoteAddr, pkt.Header.ID)
+		logger.Debugf("[dispatch] %s: no handler for pkt 0x%04x — dropping", s.Conn.RemoteAddr, pkt.Header.ID)
 		return nil
 	}
 	return h(s, pkt)
@@ -67,7 +67,7 @@ func (d *Dispatcher) Dispatch(s *Session, pkt Packet) error {
 // responds with (pktID + 1) and 4 zero bytes for any unregistered packet.
 func echoDefaultHandler() HandlerFunc {
 	return func(s *Session, pkt Packet) error {
-		log.Printf("[dispatch] %s: default echo for pkt 0x%04x", s.Conn.RemoteAddr, pkt.Header.ID)
+		logger.Debugf("[dispatch] %s: default echo for pkt 0x%04x", s.Conn.RemoteAddr, pkt.Header.ID)
 		return s.Conn.SendData(pkt.Header.ID+1, []byte{0, 0, 0, 0})
 	}
 }
@@ -224,7 +224,7 @@ func (h *Hub) UserOnline(s *Session) {
 	}
 	h.byHash[hash] = s
 	h.mu.Unlock()
-	log.Printf("[hub] UserOnline {id=%d} addr=%s", s.User.User.ID, s.Conn.RemoteAddr)
+	logger.Infof("[hub] UserOnline {id=%d} addr=%s", s.User.User.ID, s.Conn.RemoteAddr)
 }
 
 // UserOffline removes a user from byHash and byProfile, then starts a
@@ -258,12 +258,12 @@ func (h *Hub) UserOffline(s *Session) {
 		defer h.mu.Unlock()
 		if _, online := h.byHash[hash]; !online {
 			delete(h.onlineSince, hash)
-			log.Printf("[hub] user hash=%s confirmed offline (grace period elapsed)", hash)
+			logger.Infof("[hub] user hash=%s confirmed offline (grace period elapsed)", hash)
 		}
 		delete(h.offlineTimers, hash)
 	})
 	h.mu.Unlock()
-	log.Printf("[hub] UserOffline {%s} addr=%s", name, s.Conn.RemoteAddr)
+	logger.Infof("[hub] UserOffline {%s} addr=%s", name, s.Conn.RemoteAddr)
 }
 
 // IsUserOnline checks whether a user is currently authenticated.
@@ -286,7 +286,7 @@ func (h *Hub) AddSession(s *Session) {
 	h.mu.Lock()
 	h.byProfile[s.User.Profile.Name] = s
 	h.mu.Unlock()
-	log.Printf("[hub] AddSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
+	logger.Infof("[hub] AddSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
 }
 
 // RemoveSession removes a session from the profile routing map.
@@ -301,11 +301,11 @@ func (h *Hub) RemoveSession(s *Session) {
 	if exists && current == s {
 		delete(h.byProfile, s.User.Profile.Name)
 		h.mu.Unlock()
-		log.Printf("[hub] RemoveSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
+		logger.Infof("[hub] RemoveSession {%s} addr=%s", s.User.Profile.Name, s.Conn.RemoteAddr)
 	} else {
 		h.mu.Unlock()
 		if exists {
-			log.Printf("[hub] RemoveSession {%s} addr=%s — SKIPPED (hub points to different session addr=%s)", s.User.Profile.Name, s.Conn.RemoteAddr, current.Conn.RemoteAddr)
+			logger.Warnf("[hub] RemoveSession {%s} addr=%s — SKIPPED (hub points to different session addr=%s)", s.User.Profile.Name, s.Conn.RemoteAddr, current.Conn.RemoteAddr)
 		}
 	}
 }

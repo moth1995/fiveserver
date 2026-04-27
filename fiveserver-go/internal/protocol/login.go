@@ -7,7 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"io"
-	"log"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"math"
 	"time"
 
@@ -63,12 +63,12 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 	keyBytes, _ := hex.DecodeString(cipherKey)
 
 	return func(s *Session, pkt Packet) error {
-		log.Printf("[login] %s: 0x3003 authenticate — data len=%d", s.Conn.RemoteAddr, len(pkt.Data))
+		logger.Debugf("[login] %s: 0x3003 authenticate — data len=%d", s.Conn.RemoteAddr, len(pkt.Data))
 
 		// Decrypt the packet data with Blowfish ECB
 		decrypted, err := crypto.DecryptECB(keyBytes, pkt.Data)
 		if err != nil {
-			log.Printf("[login] %s: blowfish decrypt failed: %v", s.Conn.RemoteAddr, err)
+			logger.Warnf("[login] %s: blowfish decrypt failed: %v", s.Conn.RemoteAddr, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
 
@@ -76,10 +76,10 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		var clientRosterHash []byte
 		if len(decrypted) >= 64 {
 			clientRosterHash = decrypted[48:64]
-			log.Printf("[login] %s: clientRosterHash=%x (len=%d)", s.Conn.RemoteAddr, clientRosterHash, len(clientRosterHash))
+			logger.Debugf("[login] %s: clientRosterHash=%x (len=%d)", s.Conn.RemoteAddr, clientRosterHash, len(clientRosterHash))
 		} else {
 			clientRosterHash = make([]byte, 16)
-			log.Printf("[login] %s: decrypted too short (%d bytes), clientRosterHash zeroed", s.Conn.RemoteAddr, len(decrypted))
+			logger.Warnf("[login] %s: decrypted too short (%d bytes), clientRosterHash zeroed", s.Conn.RemoteAddr, len(decrypted))
 		}
 
 		// User hash is the hex of pkt.Data[32:48] (raw, before decryption)
@@ -87,35 +87,35 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		if len(pkt.Data) >= 48 {
 			userHash = hex.EncodeToString(pkt.Data[32:48])
 		}
-		log.Printf("[login] %s: userHash=%s", s.Conn.RemoteAddr, userHash)
+		logger.Debugf("[login] %s: userHash=%s", s.Conn.RemoteAddr, userHash)
 
 		ctx := context.Background()
 		u, err := db.GetUserByHash(ctx, sc, userHash)
 		if err != nil {
-			log.Printf("[login] %s: user not found (hash=%s): %v", s.Conn.RemoteAddr, userHash, err)
+			logger.Warnf("[login] %s: user not found (hash=%s): %v", s.Conn.RemoteAddr, userHash, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
-		log.Printf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
+		logger.Debugf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
 
 		// Check already online by user hash — O(1), matches Python isUserOnline(usr).
 		if hub.IsUserOnline(u) {
-			log.Printf("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
+			logger.Infof("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
 			return s.Conn.SendData(0x3004, pack32(0xffffff11))
 		}
 
 		// Roster hash check
 		if hub.Config().Roster.EnforceHash && hasNullBlock(clientRosterHash) {
-			log.Printf("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
+			logger.Infof("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
 			return s.Conn.SendData(0x3004, pack32(0xffffff12))
 		}
 
 		// Load profiles
 		profiles, err := db.GetProfilesByUserID(ctx, sc, u.ID)
 		if err != nil {
-			log.Printf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
+			logger.Errorf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
 			return s.Conn.SendData(0x3004, pack32(0xffffff10))
 		}
-		log.Printf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
+		logger.Debugf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
 		// Place profiles into fixed 3-slot array by ordinal — mirrors Python getUser().
 		slots := make([]*model.Profile, 3)
 		for _, p := range profiles {
@@ -356,12 +356,12 @@ func handleAskForSettings(hub *Hub, sc *db.StorageController) HandlerFunc {
 		// Decompress stored blobs — mirrors Python askForSettings_308a: zlib.decompress(settings.settingsN).
 		blob1, err := zlibDecompress(settings.Settings1)
 		if err != nil {
-			log.Printf("[login] settings decompress blob1 failed: %v", err)
+			logger.Warnf("[login] settings decompress blob1 failed: %v", err)
 			return s.Conn.SendData(0x3087, pack32(0xfffffedd))
 		}
 		blob2, err := zlibDecompress(settings.Settings2)
 		if err != nil {
-			log.Printf("[login] settings decompress blob2 failed: %v", err)
+			logger.Warnf("[login] settings decompress blob2 failed: %v", err)
 			return s.Conn.SendData(0x3087, pack32(0xfffffedd))
 		}
 		// Send profile ID confirmation
