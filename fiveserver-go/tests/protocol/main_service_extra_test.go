@@ -369,7 +369,7 @@ func TestChat_BannedWord_ReplacedWithWarning(t *testing.T) {
 			WarningMessage: "CENSORED",
 		},
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
+			LoginService: map[string]int{"pes5": 20102},
 		},
 	})
 	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
@@ -632,7 +632,7 @@ func TestMatchSeriesExit_NoStatsLobby_SkipsDB(t *testing.T) {
 		MaxUsers: 100, ServerName: "Test",
 		Lobbies: []config.Lobby{{Name: "Training", TypeCode: 0x20}}, // no-stats
 		NetworkServer: config.NetworkServerConfig{
-			LoginService: []config.GamePortEntry{{Port: 20102, Version: "pes5"}},
+			LoginService: map[string]int{"pes5": 20102},
 		},
 	})
 	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")

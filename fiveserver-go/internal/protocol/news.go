@@ -152,17 +152,8 @@ func makeGetServerList(hub *Hub, version string) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		cfg := hub.Config()
 
-		// Determine the login port for this game version by searching the slice.
-		loginPort := 0
-		for _, ls := range cfg.NetworkServer.LoginService {
-			if ls.Version == version {
-				loginPort = ls.Port
-				break
-			}
-		}
-		if loginPort == 0 && len(cfg.NetworkServer.LoginService) > 0 {
-			loginPort = cfg.NetworkServer.LoginService[0].Port // fallback
-		}
+		// Determine the login port for this game version by direct map lookup.
+		loginPort := cfg.NetworkServer.LoginService[version]
 
 		serverIP := cfg.ServerIPWAN()
 
