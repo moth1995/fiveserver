@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -12,20 +11,27 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"gopkg.in/yaml.v3"
 )
 
 // ---- top-level config -------------------------------------------------------
+
+type LogConfig struct {
+	File  string `yaml:"file"`
+	Level string `yaml:"level"`
+}
 
 type Config struct {
 	ServerIP             string              `yaml:"ServerIP"`
 	ListenOn             string              `yaml:"ListenOn"`
 	IpDetectUri          string              `yaml:"IpDetectUri"`
 	Lobbies              []Lobby             `yaml:"Lobbies"`
-	GamePorts            []GamePortEntry     `yaml:"GamePorts"`
+	GamePorts            map[string]int      `yaml:"GamePorts"`
 	NetworkServer        NetworkServerConfig `yaml:"NetworkServer"`
 	WebInterface         WebInterfaceConfig  `yaml:"WebInterface"`
 	Debug                bool                `yaml:"Debug"`
+	Log                  LogConfig           `yaml:"Log"`
 	DB                   DBConfig            `yaml:"DB"`
 	BannedList           string              `yaml:"BannedList"`
 	Chat                 ChatConfig          `yaml:"Chat"`
@@ -44,7 +50,9 @@ type Config struct {
 
 	// runtime-only: parsed banned list entries (net, mask) in host byte order
 	fastBanned []bannedEntry
-	// runtime-only: resolved WAN IP (set by ResolveServerIP in the background)
+	// mu protects fastBanned and all live-reloadable config fields during Reload.
+	mu sync.RWMutex
+	// ipMu protects resolvedIP only (separate to avoid blocking IP resolution).
 	ipMu       sync.RWMutex
 	resolvedIP string
 }
@@ -134,21 +142,15 @@ func lobbyTypeCode(typ string, list []string) (byte, error) {
 	}
 }
 
-// GamePortEntry associates a TCP port number with a game-version label.
-// Used for both GamePorts (news/greeting) and LoginService entries.
-type GamePortEntry struct {
-	Port    int    `yaml:"port"`
-	Version string `yaml:"version"`
-}
-
 type NetworkServerConfig struct {
-	MainService        int             `yaml:"mainService"`
-	NetworkMenuService int             `yaml:"networkMenuService"`
-	LoginService       []GamePortEntry `yaml:"loginService"`
+	MainService        int            `yaml:"mainService"`
+	NetworkMenuService int            `yaml:"networkMenuService"`
+	LoginService       map[string]int `yaml:"loginService"`
 }
 
 type WebInterfaceConfig struct {
-	Port int `yaml:"port"`
+	Port      int `yaml:"port"`
+	AdminPort int `yaml:"adminPort"`
 }
 
 type ConnectionPoolConfig struct {
@@ -258,7 +260,7 @@ func (c *Config) ResolveServerIP() {
 		c.ipMu.Lock()
 		c.resolvedIP = c.ServerIP
 		c.ipMu.Unlock()
-		log.Printf("fiveserver: server IP: %s", c.resolvedIP)
+		logger.Infof("fiveserver: server IP: %s", c.resolvedIP)
 		return
 	}
 	uri := c.IpDetectUri
@@ -278,13 +280,13 @@ func (c *Config) ResolveServerIP() {
 					c.ipMu.Lock()
 					c.resolvedIP = ip
 					c.ipMu.Unlock()
-					log.Printf("fiveserver: server IP: %s", ip)
+					logger.Infof("fiveserver: server IP: %s", ip)
 					return
 				}
 				err = rerr
 			}
 			retryDelay = min(retryDelay*2, 120*time.Second)
-			log.Printf("fiveserver: failed to determine server IP-address (ERROR: %v). Trying again in %d seconds", err, int(retryDelay.Seconds()))
+			logger.Warnf("fiveserver: failed to determine server IP-address (ERROR: %v). Trying again in %d seconds", err, int(retryDelay.Seconds()))
 			time.Sleep(retryDelay)
 		}
 	}()
@@ -350,8 +352,140 @@ func (c *Config) IsBanned(ipAddress string) bool {
 		return false
 	}
 	ipInt := binary.BigEndian.Uint32(ip.To4())
-	for _, entry := range c.fastBanned {
+	c.mu.RLock()
+	entries := c.fastBanned
+	c.mu.RUnlock()
+	for _, entry := range entries {
 		if (entry.network & entry.mask) == (ipInt & entry.mask) {
+			return true
+		}
+	}
+	return false
+}
+
+// Reload re-reads the YAML at filePath and updates all live-reloadable fields
+// atomically. Returns a list of change descriptions and any parse error.
+// Fields that cannot change at runtime (ports, DB, network) are ignored.
+func (c *Config) Reload(filePath string) ([]string, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("config: reload read %s: %w", filePath, err)
+	}
+	var fresh Config
+	if err := yaml.Unmarshal(data, &fresh); err != nil {
+		return nil, fmt.Errorf("config: reload parse %s: %w", filePath, err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var changes []string
+
+	if c.Debug != fresh.Debug {
+		changes = append(changes, fmt.Sprintf("Debug: %v -> %v", c.Debug, fresh.Debug))
+		c.Debug = fresh.Debug
+	}
+	if c.Log.Level != fresh.Log.Level {
+		changes = append(changes, fmt.Sprintf("Log.Level: %q -> %q", c.Log.Level, fresh.Log.Level))
+		c.Log.Level = fresh.Log.Level
+	}
+	if c.Log.File != fresh.Log.File {
+		changes = append(changes, fmt.Sprintf("Log.File: %q -> %q", c.Log.File, fresh.Log.File))
+		c.Log.File = fresh.Log.File
+	}
+	if c.ServerName != fresh.ServerName {
+		changes = append(changes, fmt.Sprintf("ServerName: %q -> %q", c.ServerName, fresh.ServerName))
+		c.ServerName = fresh.ServerName
+	}
+	if c.Greeting.Text != fresh.Greeting.Text {
+		changes = append(changes, "Greeting.Text changed")
+		c.Greeting = fresh.Greeting
+	}
+	if c.MaxUsers != fresh.MaxUsers {
+		changes = append(changes, fmt.Sprintf("MaxUsers: %d -> %d", c.MaxUsers, fresh.MaxUsers))
+		c.MaxUsers = fresh.MaxUsers
+	}
+	if c.StoreSettings != fresh.StoreSettings {
+		changes = append(changes, fmt.Sprintf("StoreSettings: %v -> %v", c.StoreSettings, fresh.StoreSettings))
+		c.StoreSettings = fresh.StoreSettings
+	}
+	if c.ShowStats != fresh.ShowStats {
+		changes = append(changes, fmt.Sprintf("ShowStats: %v -> %v", c.ShowStats, fresh.ShowStats))
+		c.ShowStats = fresh.ShowStats
+	}
+	if c.Disconnects != fresh.Disconnects {
+		changes = append(changes, fmt.Sprintf("Disconnects.CountAsLoss.Enabled: %v -> %v",
+			c.Disconnects.CountAsLoss.Enabled, fresh.Disconnects.CountAsLoss.Enabled))
+		c.Disconnects = fresh.Disconnects
+	}
+	if c.Roster != fresh.Roster {
+		changes = append(changes, "Roster settings changed")
+		c.Roster = fresh.Roster
+	}
+	if c.Chat.WarningMessage != fresh.Chat.WarningMessage || !stringSlicesEqual(c.Chat.BannedWords, fresh.Chat.BannedWords) {
+		changes = append(changes, "Chat settings changed")
+		c.Chat = fresh.Chat
+	}
+	if lobbiesChanged(c.Lobbies, fresh.Lobbies) {
+		changes = append(changes, fmt.Sprintf("Lobbies: %d -> %d entries", len(c.Lobbies), len(fresh.Lobbies)))
+		c.Lobbies = fresh.Lobbies
+	}
+	if c.BannedList != fresh.BannedList {
+		changes = append(changes, fmt.Sprintf("BannedList: %q -> %q", c.BannedList, fresh.BannedList))
+		c.BannedList = fresh.BannedList
+	}
+	// Always reload banned entries in case the file on disk changed.
+	if loadErr := c.loadBannedListLocked(); loadErr != nil {
+		changes = append(changes, fmt.Sprintf("BannedList reload error: %v", loadErr))
+	}
+	c.NewFeatures = fresh.NewFeatures
+
+	return changes, nil
+}
+
+// loadBannedListLocked reloads fastBanned from disk. Must be called with c.mu write-locked.
+func (c *Config) loadBannedListLocked() error {
+	path := c.BannedList
+	if path == "" {
+		return nil
+	}
+	if !isAbsPath(path) {
+		fsroot := os.Getenv("FSROOT")
+		if fsroot == "" {
+			fsroot = "."
+		}
+		path = fsroot + "/" + path
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil // absent file is not an error
+	}
+	var bf bannedFile
+	if err := yaml.Unmarshal(data, &bf); err != nil {
+		return fmt.Errorf("config: parse banned list: %w", err)
+	}
+	c.fastBanned = parseBannedSpecs(bf.Banned)
+	return nil
+}
+
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func lobbiesChanged(a, b []Lobby) bool {
+	if len(a) != len(b) {
+		return true
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].Type != b[i].Type || a[i].TypeCode != b[i].TypeCode {
 			return true
 		}
 	}
