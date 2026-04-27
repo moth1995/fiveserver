@@ -3,30 +3,35 @@ package admin
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
+	"github.com/fiveserver/fiveserver-go/internal/config"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 )
 
 // Server exposes an HTTP admin API.
 type Server struct {
-	hub *protocol.Hub
+	hub        *protocol.Hub
+	cfg        *config.Config
+	configPath string
 }
 
-func NewServer(hub *protocol.Hub) *Server {
-	return &Server{hub: hub}
+func NewServer(hub *protocol.Hub, cfg *config.Config, configPath string) *Server {
+	return &Server{hub: hub, cfg: cfg, configPath: configPath}
 }
 
 // ListenAndServe starts the HTTP server on addr (e.g. "0.0.0.0:8180").
 // Blocks until the server stops.
 func (srv *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/chat", srv.handleBroadcast)
-	mux.HandleFunc("GET /api/users", srv.handleUsers)
-	mux.HandleFunc("POST /api/kick", srv.handleKick)
-	log.Printf("[admin] HTTP server listening on %s", addr)
+	mux.HandleFunc("POST /admin/chat", srv.handleBroadcast)
+	mux.HandleFunc("POST /admin/kick", srv.handleKick)
+	mux.HandleFunc("GET /admin/config", srv.handleGetConfig)
+	mux.HandleFunc("POST /admin/reload-config", srv.handleReloadConfig)
+	mux.HandleFunc("GET /stats/users", srv.handleUsers)
+	logger.Infof("[admin] HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
 
@@ -72,7 +77,7 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("[admin] broadcast %q to %d lobby/lobbies", req.Message, sent)
+	logger.Infof("[admin] broadcast %q to %d lobby/lobbies", req.Message, sent)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]int{"lobbies": sent})
 }
@@ -138,9 +143,67 @@ func (srv *Server) handleKick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[admin] kicking %s (addr=%s)", req.Profile, s.Conn.RemoteAddr)
+	logger.Infof("[admin] kicking %s (addr=%s)", req.Profile, s.Conn.RemoteAddr)
 	srv.hub.KickSession(s)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile})
+}
+
+// handleGetConfig handles GET /api/config — returns live-reloadable config fields.
+func (srv *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
+	c := srv.cfg
+	type configView struct {
+		Debug         bool                    `json:"debug"`
+		LogLevel      string                  `json:"log_level"`
+		LogFile       string                  `json:"log_file"`
+		ServerName    string                  `json:"server_name"`
+		GreetingText  string                  `json:"greeting_text"`
+		MaxUsers      int                     `json:"max_users"`
+		Lobbies       []string                `json:"lobbies"`
+		BannedList    string                  `json:"banned_list"`
+		StoreSettings bool                    `json:"store_settings"`
+		ShowStats     bool                    `json:"show_stats"`
+		Chat          config.ChatConfig       `json:"chat"`
+		Disconnects   config.DisconnectsConfig `json:"disconnects"`
+		Roster        config.RosterConfig     `json:"roster"`
+	}
+	lobbyNames := make([]string, len(c.Lobbies))
+	for i, l := range c.Lobbies {
+		lobbyNames[i] = l.Name
+	}
+	view := configView{
+		Debug:         c.Debug,
+		LogLevel:      c.Log.Level,
+		LogFile:       c.Log.File,
+		ServerName:    c.ServerName,
+		GreetingText:  c.Greeting.Text,
+		MaxUsers:      c.MaxUsers,
+		Lobbies:       lobbyNames,
+		BannedList:    c.BannedList,
+		StoreSettings: c.StoreSettings,
+		ShowStats:     c.ShowStats,
+		Chat:          c.Chat,
+		Disconnects:   c.Disconnects,
+		Roster:        c.Roster,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(view)
+}
+
+// handleReloadConfig handles POST /api/reload-config — re-reads the YAML file
+// and applies live-reloadable fields without restarting the server.
+func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
+	changes, err := srv.cfg.Reload(srv.configPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	logger.SetLevel(srv.cfg.Log.Level)
+	logger.Infof("[admin] config reloaded: %d change(s)", len(changes))
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"changes": changes,
+		"count":   len(changes),
+	})
 }
