@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/fiveserver/fiveserver-go/internal/config"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 )
 
 // Pool holds one or more *sql.DB handles and picks among them round-robin.
@@ -79,7 +79,7 @@ type StorageController struct {
 
 // NewStorageController builds DSNs from cfg and opens the pools.
 func NewStorageController(cfg config.DBConfig) (*StorageController, error) {
-	log.Printf("db: connecting as user=%q password=%q db=%q", cfg.User, cfg.Password, cfg.Name)
+	logger.Infof("db: connecting as user=%q db=%q", cfg.User, cfg.Name)
 	buildDSNs := func(hosts []string) []string {
 		dsns := make([]string, len(hosts))
 		for i, h := range hosts {
