@@ -44,7 +44,7 @@ func newsHub(maxUsers int) *protocol.Hub {
 		NetworkServer: config.NetworkServerConfig{
 			MainService:        20100,
 			NetworkMenuService: 20101,
-			LoginService:       []config.GamePortEntry{{Port: 20102, Version: "pes5"}, {Port: 20103, Version: "we9"}, {Port: 20104, Version: "we9le"}},
+			LoginService:       map[string]int{"pes5": 20102, "we9": 20103, "we9le": 20104},
 		},
 		Greeting: config.GreetingConfig{Text: "Welcome!"},
 	})
