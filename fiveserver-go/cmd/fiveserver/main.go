@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"github.com/fiveserver/fiveserver-go/internal/admin"
 	"github.com/fiveserver/fiveserver-go/internal/config"
 	"github.com/fiveserver/fiveserver-go/internal/db"
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 	"github.com/fiveserver/fiveserver-go/internal/server"
 )
@@ -23,22 +23,35 @@ func main() {
 	configPath := flag.String("config", "etc/conf/fiveserver.yaml", "path to fiveserver.yaml")
 	flag.Parse()
 
+	// ---- 0. Pre-config logger (stdout, info) -----------------------------------
+	if err := logger.Init("info", ""); err != nil {
+		panic(err)
+	}
+
 	// ---- 1. Load config --------------------------------------------------------
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("config: %v", err)
+		logger.Criticalf("config: %v", err)
+		os.Exit(1)
 	}
-	log.Printf("fiveserver: loaded config from %s", *configPath)
+	logger.Infof("fiveserver: loaded config from %s", *configPath)
+
+	// ---- 1b. Re-init logger with configured file and level ---------------------
+	if err := logger.Init(cfg.Log.Level, cfg.Log.File); err != nil {
+		logger.Warnf("fiveserver: could not open log file %q: %v — continuing with stdout only", cfg.Log.File, err)
+	}
+
 	cfg.ResolveServerIP()
 
 	// ---- 2. Init storage controller -------------------------------------------
 	sc, err := db.NewStorageController(cfg.DB)
 	if err != nil {
-		log.Fatalf("db: %v", err)
+		logger.Criticalf("db: %v", err)
+		os.Exit(1)
 	}
 	defer func() {
 		if err := sc.Close(); err != nil {
-			log.Printf("db: close: %v", err)
+			logger.Errorf("db: close: %v", err)
 		}
 	}()
 
@@ -64,12 +77,12 @@ func main() {
 	}
 
 	// Admin HTTP server
-	if cfg.WebInterface.Port != 0 {
-		adminAddr := fmt.Sprintf("%s:%d", listenOn, cfg.WebInterface.Port)
+	if cfg.WebInterface.AdminPort != 0 {
+		adminAddr := fmt.Sprintf("%s:%d", listenOn, cfg.WebInterface.AdminPort)
 		go func() {
-			adminSrv := admin.NewServer(hub)
+			adminSrv := admin.NewServer(hub, cfg, *configPath)
 			if err := adminSrv.ListenAndServe(adminAddr); err != nil {
-				log.Printf("admin: %v", err)
+				logger.Errorf("admin: %v", err)
 			}
 		}()
 	}
@@ -77,16 +90,16 @@ func main() {
 	usedPorts := make(map[int]bool)
 	listen := func(addr string, port int, d *protocol.Dispatcher, filter ...func(string) error) {
 		if usedPorts[port] {
-			log.Printf("skipping duplicate port %d", port)
+			logger.Warnf("skipping duplicate port %d", port)
 			return
 		}
 		usedPorts[port] = true
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			log.Printf("listening on %s", addr)
+			logger.Infof("listening on %s", addr)
 			if err := server.Serve(addr, d, ctx.Done(), cfg.Debug, filter...); err != nil {
-				log.Printf("server %s: %v", addr, err)
+				logger.Errorf("server %s: %v", addr, err)
 			}
 		}()
 	}
@@ -108,17 +121,17 @@ func main() {
 	}
 
 	// News service — one per game version
-	for _, gp := range cfg.GamePorts {
-		gp := gp
-		listen(fmt.Sprintf("%s:%d", listenOn, gp.Port), gp.Port,
-			protocol.NewNewsDispatcher(hub, gp.Version))
+	for version, port := range cfg.GamePorts {
+		v, p := version, port
+		listen(fmt.Sprintf("%s:%d", listenOn, p), p,
+			protocol.NewNewsDispatcher(hub, v))
 	}
 
 	// Login service — one per game version
-	for _, ls := range cfg.NetworkServer.LoginService {
-		ls := ls
-		listen(fmt.Sprintf("%s:%d", listenOn, ls.Port), ls.Port,
-			protocol.NewLoginDispatcher(hub, sc, ls.Version), connectFilter)
+	for version, port := range cfg.NetworkServer.LoginService {
+		v, p := version, port
+		listen(fmt.Sprintf("%s:%d", listenOn, p), p,
+			protocol.NewLoginDispatcher(hub, sc, v), connectFilter)
 	}
 
 	// Network menu service
@@ -134,9 +147,9 @@ func main() {
 	}
 
 	// ---- 7. Wait for shutdown signal -------------------------------------------
-	log.Printf("fiveserver: all listeners started — Ctrl+C to stop")
+	logger.Infof("fiveserver: all listeners started — Ctrl+C to stop")
 	<-ctx.Done()
-	log.Printf("fiveserver: shutting down…")
+	logger.Infof("fiveserver: shutting down…")
 	wg.Wait()
-	log.Printf("fiveserver: stopped")
+	logger.Infof("fiveserver: stopped")
 }
