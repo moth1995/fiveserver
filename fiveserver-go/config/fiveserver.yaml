@@ -38,6 +38,11 @@ NetworkServer:
 
 WebInterface:
     port: 8180
+    adminPort: 8181
+
+Log:
+    file: ./log/fiveserver.log
+    level: info
 
 Debug:
     false
