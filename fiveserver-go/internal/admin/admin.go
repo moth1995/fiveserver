@@ -8,6 +8,7 @@ import (
 
 	"github.com/fiveserver/fiveserver-go/internal/config"
 	"github.com/fiveserver/fiveserver-go/internal/logger"
+	"github.com/fiveserver/fiveserver-go/internal/model"
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 )
 
@@ -31,6 +32,7 @@ func (srv *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("GET /admin/config", srv.handleGetConfig)
 	mux.HandleFunc("POST /admin/reload-config", srv.handleReloadConfig)
 	mux.HandleFunc("GET /stats/users", srv.handleUsers)
+	mux.HandleFunc("GET /lobby-stats", srv.handleLobbyStats)
 	logger.Infof("[admin] HTTP server listening on %s", addr)
 	return http.ListenAndServe(addr, mux)
 }
@@ -82,7 +84,7 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"lobbies": sent})
 }
 
-// handleUsers handles GET /api/users — returns all online sessions.
+// handleUsers handles GET /stats/users — returns all online sessions.
 func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	type userEntry struct {
 		Profile       string `json:"profile"`
@@ -206,4 +208,58 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 		"changes": changes,
 		"count":   len(changes),
 	})
+}
+
+// handleLobbyStats handles GET /lobby-stats — returns per-lobby player counts and
+// active matches (score, profiles, team IDs, elapsed time).
+func (srv *Server) handleLobbyStats(w http.ResponseWriter, r *http.Request) {
+	type matchEntry struct {
+		Score       string `json:"score"`
+		HomeProfile string `json:"home_profile"`
+		AwayProfile string `json:"away_profile"`
+		RoomName    string `json:"room_name"`
+		MatchTime   int    `json:"match_time"`
+		TeamIDHome  int    `json:"team_id_home"`
+		TeamIDAway  int    `json:"team_id_away"`
+	}
+	type lobbyEntry struct {
+		Name        string       `json:"name"`
+		PlayerCount int          `json:"player_count"`
+		Matches     []matchEntry `json:"matches"`
+	}
+
+	lobbies := srv.hub.Lobbies()
+	out := make([]lobbyEntry, 0, len(lobbies))
+	for _, l := range lobbies {
+		entry := lobbyEntry{
+			Name:        l.Name,
+			PlayerCount: l.PlayerCount(),
+			Matches:     []matchEntry{},
+		}
+		for _, room := range l.Rooms() {
+			if room.Phase < model.RoomMatchStarted || room.Match == nil {
+				continue
+			}
+			me := matchEntry{
+				Score:     fmt.Sprintf("%d:%d", room.Match.ScoreHome, room.Match.ScoreAway),
+				RoomName:  room.Name,
+				MatchTime: int(time.Since(room.Match.StartTime).Minutes()),
+			}
+			if room.TeamSelection != nil {
+				me.TeamIDHome = room.TeamSelection.HomeTeamID
+				me.TeamIDAway = room.TeamSelection.AwayTeamID
+				if room.TeamSelection.HomeCaptain != nil {
+					me.HomeProfile = room.TeamSelection.HomeCaptain.Name
+				}
+				if room.TeamSelection.AwayCaptain != nil {
+					me.AwayProfile = room.TeamSelection.AwayCaptain.Name
+				}
+			}
+			entry.Matches = append(entry.Matches, me)
+		}
+		out = append(out, entry)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"lobbies": out})
 }
