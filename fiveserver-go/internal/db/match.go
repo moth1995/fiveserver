@@ -37,7 +37,28 @@ func RecordMatch(ctx context.Context, sc *StorageController, m *model.Match) (in
 		return 0, fmt.Errorf("db/match: last insert id: %w", err)
 	}
 
-	// 2. Update streaks — mirrors Python _writeStreak()
+	// 2. Insert metrics row into match_rosters (never touches the core matches table)
+	if m.HomeRosterHash != "" || m.AwayRosterHash != "" || !m.StartTime.IsZero() {
+		var homeHash, awayHash, startedAt any
+		if m.HomeRosterHash != "" {
+			homeHash = m.HomeRosterHash
+		}
+		if m.AwayRosterHash != "" {
+			awayHash = m.AwayRosterHash
+		}
+		if !m.StartTime.IsZero() {
+			startedAt = m.StartTime
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO match_rosters (match_id, home_roster_hash, away_roster_hash, started_at)
+			 VALUES (?, ?, ?, ?)`,
+			matchID, homeHash, awayHash, startedAt,
+		); err != nil {
+			return 0, fmt.Errorf("db/match: insert rosters: %w", err)
+		}
+	}
+
+	// 4. Update streaks — mirrors Python _writeStreak()
 	writeStreak := func(profileID int, win bool) error {
 		var wins, best int
 		row := tx.QueryRowContext(ctx,
