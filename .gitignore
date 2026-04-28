@@ -3,3 +3,4 @@ __pycache__
 *.log
 etc/data/*.yaml
 .claude/
+.venv
