@@ -90,9 +90,11 @@ type Session struct {
 // MatchState tracks the two sessions in an active match.
 // Keyed in Hub by the "home" session pointer.
 type MatchState struct {
-	Home    *Session
-	Away    *Session
-	Started time.Time
+	Home           *Session
+	Away           *Session
+	Started        time.Time
+	HomeRosterHash string
+	AwayRosterHash string
 }
 
 // offlineGracePeriod is the delay after a disconnect before a user is considered
