@@ -53,6 +53,20 @@ def create_app(
     app.secret_key = os.environ.get('FLASK_SECRET', cfg.get('FlaskSecretKey', secrets.token_hex(32)))
 
     # ------------------------------------------------------------------
+    # Template filters
+    # ------------------------------------------------------------------
+    @app.template_filter('format_duration')
+    def _format_duration(seconds: int) -> str:
+        seconds = int(seconds)
+        h, rem = divmod(seconds, 3600)
+        m, s = divmod(rem, 60)
+        if h:
+            return f'{h}h {m}m {s}s'
+        if m:
+            return f'{m}m {s}s'
+        return f'{s}s'
+
+    # ------------------------------------------------------------------
     # DB teardown
     # ------------------------------------------------------------------
     app.teardown_appcontext(teardown_db)
