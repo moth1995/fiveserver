@@ -23,7 +23,7 @@
   <thead><tr><th>Username</th><th>Lobby</th><th>Connected Since</th></tr></thead>
   <tbody>
   {% for u in online_users %}
-  <tr><td>{{ u.username }}</td><td>{{ u.lobby }}</td><td>{{ u.since }}</td></tr>
+  <tr><td>{{ u.username }}</td><td>{{ u.lobby }}</td><td>{{ u.online_seconds | format_duration }}</td></tr>
   {% endfor %}
   </tbody>
 </table>

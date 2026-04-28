@@ -78,12 +78,12 @@ def _go_api_base() -> str:
 
 
 def _get_online_users() -> list[dict[str, Any]]:
-    """Call Go server's API. Returns [] on any error."""
+    """Call Go server's /stats/users. Returns [] on any error."""
     try:
         with urllib.request.urlopen(
-                f'{_go_api_base()}/online-users', timeout=1) as resp:
-            data: dict[str, Any] = json.loads(resp.read())
-            return data.get('users', [])
+                f'{_go_api_base()}/stats/users', timeout=1) as resp:
+            data: list[dict[str, Any]] = json.loads(resp.read())
+            return data if isinstance(data, list) else []
     except Exception:
         return []
 
