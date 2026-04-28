@@ -452,6 +452,22 @@ func handleChallengeResponse4323(hub *Hub) HandlerFunc {
 				_ = challengerSess.Conn.SendData(0x4321, ultimate)
 			}
 
+			// Record roster hashes on MatchState for later DB persistence.
+			homeHash := ""
+			if s.User.Info != nil {
+				homeHash = s.User.Info.RosterHash
+			}
+			awayHash := ""
+			if challenger.Info != nil {
+				awayHash = challenger.Info.RosterHash
+			}
+			hub.SetPendingMatch(&MatchState{
+				Home:           s,
+				Away:           challengerSess,
+				HomeRosterHash: homeHash,
+				AwayRosterHash: awayHash,
+			})
+
 			// Send match confirmation to owner
 			data := append(
 				model.PadWithZeros(challenger.Profile.Name, 16),
@@ -657,14 +673,25 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 			match.HomeTeamID, match.AwayTeamID, match.ScoreHome, match.ScoreAway)
 
 		ctx := context.Background()
+
+		var homeRosterHash, awayRosterHash string
+		if ms, ok := hub.PendingMatch(s); ok {
+			homeRosterHash = ms.HomeRosterHash
+			awayRosterHash = ms.AwayRosterHash
+			hub.ClearPendingMatch(s)
+		}
+
 		dbMatch := &model.Match{
-			HomeProfileID: match.HomeProfileID,
-			AwayProfileID: match.AwayProfileID,
-			HomeTeamID:    match.HomeTeamID,
-			AwayTeamID:    match.AwayTeamID,
-			ScoreHome:     match.ScoreHome,
-			ScoreAway:     match.ScoreAway,
-			PlayedOn:      time.Now(),
+			HomeProfileID:  match.HomeProfileID,
+			AwayProfileID:  match.AwayProfileID,
+			HomeTeamID:     match.HomeTeamID,
+			AwayTeamID:     match.AwayTeamID,
+			ScoreHome:      match.ScoreHome,
+			ScoreAway:      match.ScoreAway,
+			PlayedOn:       time.Now(),
+			StartTime:      match.StartTime,
+			HomeRosterHash: homeRosterHash,
+			AwayRosterHash: awayRosterHash,
 		}
 		if _, err := db.RecordMatch(ctx, sc, dbMatch); err != nil {
 			logger.Errorf("[main] ERROR recording match: %v", err)
