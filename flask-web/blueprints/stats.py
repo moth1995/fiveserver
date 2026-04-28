@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 import calendar
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Any
 
 from flask import (
@@ -44,31 +44,28 @@ def check_auth() -> Response | None:
 
 
 # ---------------------------------------------------------------------------
-# Mock data — replace with real DB queries once sql/metrics.sql is applied
+# Placeholder data — replace with real DB queries after sql/metrics.sql applied
 # ---------------------------------------------------------------------------
 
 def _mock_matches_per_day(year: int, month: int) -> list[dict[str, Any]]:
-    days_in_month = calendar.monthrange(year, month)[1]
     import random
+    days_in_month = calendar.monthrange(year, month)[1]
     rng = random.Random(year * 100 + month)
-    return [
-        {'day': d, 'count': rng.randint(0, 48)}
-        for d in range(1, days_in_month + 1)
-    ]
+    return [{'day': d, 'count': rng.randint(0, 48)} for d in range(1, days_in_month + 1)]
 
 
 def _mock_top_teams() -> list[dict[str, Any]]:
     return [
-        {'team_id': 5,  'name': 'Brazil',    'count': 312},
-        {'team_id': 1,  'name': 'Argentina', 'count': 287},
-        {'team_id': 12, 'name': 'Italy',     'count': 241},
-        {'team_id': 7,  'name': 'England',   'count': 198},
-        {'team_id': 3,  'name': 'France',    'count': 175},
-        {'team_id': 9,  'name': 'Germany',   'count': 154},
-        {'team_id': 21, 'name': 'Portugal',  'count': 132},
-        {'team_id': 14, 'name': 'Spain',     'count': 119},
-        {'team_id': 6,  'name': 'Netherlands','count': 98},
-        {'team_id': 18, 'name': 'Croatia',   'count': 87},
+        {'team_id': 5,  'count': 312},
+        {'team_id': 1,  'count': 287},
+        {'team_id': 12, 'count': 241},
+        {'team_id': 7,  'count': 198},
+        {'team_id': 3,  'count': 175},
+        {'team_id': 9,  'count': 154},
+        {'team_id': 21, 'count': 132},
+        {'team_id': 14, 'count': 119},
+        {'team_id': 6,  'count': 98},
+        {'team_id': 18, 'count': 87},
     ]
 
 
@@ -77,14 +74,12 @@ def _mock_top_rosters() -> list[dict[str, Any]]:
         {'hash': 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 'count': 204},
         {'hash': 'deadbeefdeadbeefdeadbeefdeadbeef', 'count': 177},
         {'hash': 'cafebabecafebabecafebabecafebabe', 'count': 143},
-        {'hash': '0102030405060708090a0b0c0d0e0f10', 'count': 98},
-        {'hash': 'fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0', 'count': 71},
     ]
 
 
-def _mock_summary(year: int, month: int, date_from: date, date_to: date) -> dict[str, Any]:
+def _mock_summary(date_from: date, date_to: date) -> dict[str, Any]:
     import random
-    rng = random.Random(year * 100 + month)
+    rng = random.Random(date_from.toordinal())
     days = max(1, (date_to - date_from).days + 1)
     return {
         'total_matches': rng.randint(800, 1400),
@@ -133,9 +128,8 @@ def home() -> str:
     max_daily = max((d['count'] for d in matches_per_day), default=1) or 1
     top_teams = _mock_top_teams()
     top_rosters = _mock_top_rosters()
-    summary = _mock_summary(year, month, date_from, date_to)
+    summary = _mock_summary(date_from, date_to)
 
-    # Build month options for the selector (last 12 months)
     month_options: list[dict[str, str]] = []
     cursor = date.today().replace(day=1)
     for _ in range(12):
