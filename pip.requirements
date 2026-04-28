@@ -1,7 +1,0 @@
-mysqlclient
-PyYAML
-Twisted==20.3.0
-pyOpenSSL
-pycryptodome
-zope.interface
-service-identity
