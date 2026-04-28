@@ -306,17 +306,19 @@ const (
 
 // Match mirrors the Python Match class in model/lobby.py and the `matches` table.
 type Match struct {
-	ID            int
-	HomeProfileID int
-	AwayProfileID int
-	HomeTeamID    int
-	AwayTeamID    int
-	ScoreHome     int
-	ScoreAway     int
-	StartTime     time.Time
-	PlayedOn      time.Time
-	HomeExit      interface{} // disconnect tracking
-	AwayExit      interface{}
+	ID             int
+	HomeProfileID  int
+	AwayProfileID  int
+	HomeTeamID     int
+	AwayTeamID     int
+	ScoreHome      int
+	ScoreAway      int
+	StartTime      time.Time
+	PlayedOn       time.Time
+	HomeExit       interface{} // disconnect tracking
+	AwayExit       interface{}
+	HomeRosterHash string
+	AwayRosterHash string
 }
 
 // MatchSettings mirrors Python MatchSettings in model/lobby.py.
