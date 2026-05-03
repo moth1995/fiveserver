@@ -23,6 +23,7 @@ from db import (
     create_user,
     update_user,
     create_profiles_for_user,
+    record_user_registration,
 )
 
 register_bp = Blueprint('register', __name__)
@@ -80,6 +81,7 @@ def register():  # type: ignore[return]
             ), 409
         new_id: int = create_user(conn, username, serial, encrypted_hash)
         create_profiles_for_user(conn, new_id)
+        record_user_registration(conn, new_id)
         return render_template(
             'register/result.html',
             message='Registration complete',
