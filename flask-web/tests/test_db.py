@@ -158,5 +158,95 @@ class TestCreateProfilesForUser(unittest.TestCase):
             self.assertEqual(args[1][1], i)    # ordinal 0, 1, 2
 
 
+class TestRecordUserRegistration(unittest.TestCase):
+
+    def test_inserts_with_ignore(self) -> None:
+        conn = _make_conn()
+        db.record_user_registration(conn, 7)
+        cursor = conn.cursor().__enter__()
+        args = cursor.execute.call_args[0]
+        self.assertIn('INSERT IGNORE INTO user_registrations', args[0])
+        self.assertEqual(args[1], (7,))
+
+
+class TestStatsMatchesPerDay(unittest.TestCase):
+
+    def test_fills_zero_days(self) -> None:
+        conn = _make_conn(fetchall_val=[{'day': 15, 'count': 3}])
+        result = db.stats_matches_per_day(conn, 2026, 4)
+        self.assertEqual(len(result), 30)  # April has 30 days
+        self.assertEqual(result[14]['day'], 15)
+        self.assertEqual(result[14]['count'], 3)
+        self.assertEqual(result[0]['count'], 0)
+
+    def test_empty_month_all_zeros(self) -> None:
+        conn = _make_conn(fetchall_val=[])
+        result = db.stats_matches_per_day(conn, 2026, 2)
+        self.assertTrue(all(d['count'] == 0 for d in result))
+        self.assertEqual(len(result), 28)
+
+
+class TestStatsTopTeams(unittest.TestCase):
+
+    def test_returns_rows(self) -> None:
+        expected = [{'team_id': 1, 'count': 10}, {'team_id': 5, 'count': 7}]
+        conn = _make_conn(fetchall_val=expected)
+        result = db.stats_top_teams(conn, '2026-04-01', '2026-04-30')
+        self.assertEqual(result, expected)
+        cursor = conn.cursor().__enter__()
+        sql = cursor.execute.call_args[0][0]
+        self.assertIn('team_id_home', sql)
+        self.assertIn('team_id_away', sql)
+        self.assertIn('UNION ALL', sql)
+
+    def test_default_limit_10(self) -> None:
+        conn = _make_conn(fetchall_val=[])
+        db.stats_top_teams(conn, '2026-04-01', '2026-04-30')
+        params = conn.cursor().__enter__().execute.call_args[0][1]
+        self.assertEqual(params[-1], 10)
+
+
+class TestStatsTopRosters(unittest.TestCase):
+
+    def test_returns_rows(self) -> None:
+        expected = [{'hash': 'aabbcc', 'count': 5}]
+        conn = _make_conn(fetchall_val=expected)
+        result = db.stats_top_rosters(conn, '2026-04-01', '2026-04-30')
+        self.assertEqual(result, expected)
+        cursor = conn.cursor().__enter__()
+        sql = cursor.execute.call_args[0][0]
+        self.assertIn('match_rosters', sql)
+        self.assertIn('home_roster_hash', sql)
+        self.assertIn('away_roster_hash', sql)
+
+
+class TestStatsSummary(unittest.TestCase):
+
+    def test_returns_all_fields(self) -> None:
+        conn = _make_conn()
+        cursor = conn.cursor().__enter__()
+        cursor.fetchone.side_effect = [
+            {'n': 20, 'avg_goals': 2.4},   # matches query
+            {'n': 8},                        # active_users
+            {'n': 3},                        # new_users
+        ]
+        result = db.stats_summary(conn, '2026-04-01', '2026-04-30')
+        self.assertEqual(result['total_matches'], 20)
+        self.assertEqual(result['active_users'], 8)
+        self.assertEqual(result['new_users'], 3)
+        self.assertEqual(result['avg_goals_per_match'], 2.4)
+
+    def test_avg_goals_rounded(self) -> None:
+        conn = _make_conn()
+        cursor = conn.cursor().__enter__()
+        cursor.fetchone.side_effect = [
+            {'n': 5, 'avg_goals': 2.666},
+            {'n': 2},
+            {'n': 1},
+        ]
+        result = db.stats_summary(conn, '2026-04-01', '2026-04-30')
+        self.assertEqual(result['avg_goals_per_match'], 2.7)
+
+
 if __name__ == '__main__':
     unittest.main()
