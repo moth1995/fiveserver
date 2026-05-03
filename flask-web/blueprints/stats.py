@@ -15,6 +15,14 @@ from flask import (
     request,
 )
 
+from db import (
+    get_db,
+    stats_matches_per_day,
+    stats_top_teams,
+    stats_top_rosters,
+    stats_summary,
+)
+
 stats_bp = Blueprint('stats', __name__, url_prefix='/stats')
 
 # ---------------------------------------------------------------------------
@@ -41,52 +49,6 @@ def _require_auth() -> Response | None:
 @stats_bp.before_request
 def check_auth() -> Response | None:
     return _require_auth()
-
-
-# ---------------------------------------------------------------------------
-# Placeholder data — replace with real DB queries after sql/metrics.sql applied
-# ---------------------------------------------------------------------------
-
-def _mock_matches_per_day(year: int, month: int) -> list[dict[str, Any]]:
-    import random
-    days_in_month = calendar.monthrange(year, month)[1]
-    rng = random.Random(year * 100 + month)
-    return [{'day': d, 'count': rng.randint(0, 48)} for d in range(1, days_in_month + 1)]
-
-
-def _mock_top_teams() -> list[dict[str, Any]]:
-    return [
-        {'team_id': 5,  'count': 312},
-        {'team_id': 1,  'count': 287},
-        {'team_id': 12, 'count': 241},
-        {'team_id': 7,  'count': 198},
-        {'team_id': 3,  'count': 175},
-        {'team_id': 9,  'count': 154},
-        {'team_id': 21, 'count': 132},
-        {'team_id': 14, 'count': 119},
-        {'team_id': 6,  'count': 98},
-        {'team_id': 18, 'count': 87},
-    ]
-
-
-def _mock_top_rosters() -> list[dict[str, Any]]:
-    return [
-        {'hash': 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 'count': 204},
-        {'hash': 'deadbeefdeadbeefdeadbeefdeadbeef', 'count': 177},
-        {'hash': 'cafebabecafebabecafebabecafebabe', 'count': 143},
-    ]
-
-
-def _mock_summary(date_from: date, date_to: date) -> dict[str, Any]:
-    import random
-    rng = random.Random(date_from.toordinal())
-    days = max(1, (date_to - date_from).days + 1)
-    return {
-        'total_matches': rng.randint(800, 1400),
-        'active_users': rng.randint(40, 120) * days // 30,
-        'new_users': rng.randint(10, 60),
-        'avg_goals_per_match': round(rng.uniform(1.8, 3.2), 1),
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -124,11 +86,12 @@ def home() -> str:
     year, month, date_from, date_to = _parse_filters()
     month_label = date(year, month, 1).strftime('%B %Y')
 
-    matches_per_day = _mock_matches_per_day(year, month)
-    max_daily = max((d['count'] for d in matches_per_day), default=1) or 1
-    top_teams = _mock_top_teams()
-    top_rosters = _mock_top_rosters()
-    summary = _mock_summary(date_from, date_to)
+    conn = get_db()
+    matches_per_day: list[dict[str, Any]] = stats_matches_per_day(conn, year, month)
+    max_daily: int = max((d['count'] for d in matches_per_day), default=1) or 1
+    top_teams: list[dict[str, Any]] = stats_top_teams(conn, date_from, date_to)
+    top_rosters: list[dict[str, Any]] = stats_top_rosters(conn, date_from, date_to)
+    summary: dict[str, Any] = stats_summary(conn, date_from, date_to)
 
     month_options: list[dict[str, str]] = []
     cursor = date.today().replace(day=1)

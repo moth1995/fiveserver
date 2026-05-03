@@ -285,3 +285,107 @@ def create_profiles_for_user(conn: pymysql.connections.Connection,
             cur.execute(
                 'INSERT INTO profiles (user_id, ordinal, name) VALUES (%s, %s, %s)',
                 (user_id, ordinal, ''))
+
+
+# ---------------------------------------------------------------------------
+# Metrics queries  (requires sql/metrics.sql applied)
+# ---------------------------------------------------------------------------
+
+def record_user_registration(conn: pymysql.connections.Connection,
+                              user_id: int) -> None:
+    """Insert a registration timestamp for a new user (metrics.sql table)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'INSERT IGNORE INTO user_registrations (user_id) VALUES (%s)',
+            (user_id,))
+
+
+def stats_matches_per_day(conn: pymysql.connections.Connection,
+                          year: int, month: int) -> list[dict[str, Any]]:
+    """Return [{day, count}] for every day in the given month."""
+    import calendar
+    from datetime import date
+    days_in_month = calendar.monthrange(year, month)[1]
+    date_from = date(year, month, 1)
+    date_to = date(year, month, days_in_month)
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT DAY(played_on) AS day, COUNT(*) AS count '
+            'FROM matches '
+            'WHERE DATE(played_on) BETWEEN %s AND %s '
+            'GROUP BY DAY(played_on)',
+            (date_from, date_to))
+        rows: dict[int, int] = {r['day']: r['count'] for r in cur.fetchall()}
+    return [{'day': d, 'count': rows.get(d, 0)} for d in range(1, days_in_month + 1)]
+
+
+def stats_top_teams(conn: pymysql.connections.Connection,
+                    date_from: Any, date_to: Any,
+                    limit: int = 10) -> list[dict[str, Any]]:
+    """Return [{team_id, count}] of most-picked teams in the date range."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT team_id, COUNT(*) AS count FROM ('
+            '  SELECT team_id_home AS team_id FROM matches '
+            '  WHERE DATE(played_on) BETWEEN %s AND %s AND team_id_home >= 0 '
+            '  UNION ALL '
+            '  SELECT team_id_away FROM matches '
+            '  WHERE DATE(played_on) BETWEEN %s AND %s AND team_id_away >= 0 '
+            ') t GROUP BY team_id ORDER BY count DESC LIMIT %s',
+            (date_from, date_to, date_from, date_to, limit))
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def stats_top_rosters(conn: pymysql.connections.Connection,
+                      date_from: Any, date_to: Any,
+                      limit: int = 10) -> list[dict[str, Any]]:
+    """Return [{hash, count}] of most-used roster hashes. Requires match_rosters table."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT roster_hash AS hash, COUNT(*) AS count FROM ('
+            '  SELECT mr.home_roster_hash AS roster_hash '
+            '  FROM match_rosters mr JOIN matches m ON mr.match_id = m.id '
+            '  WHERE DATE(m.played_on) BETWEEN %s AND %s AND mr.home_roster_hash IS NOT NULL '
+            '  UNION ALL '
+            '  SELECT mr.away_roster_hash '
+            '  FROM match_rosters mr JOIN matches m ON mr.match_id = m.id '
+            '  WHERE DATE(m.played_on) BETWEEN %s AND %s AND mr.away_roster_hash IS NOT NULL '
+            ') r GROUP BY roster_hash ORDER BY count DESC LIMIT %s',
+            (date_from, date_to, date_from, date_to, limit))
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def stats_summary(conn: pymysql.connections.Connection,
+                  date_from: Any, date_to: Any) -> dict[str, Any]:
+    """Return aggregate summary stats for the given date range."""
+    with conn.cursor() as cur:
+        cur.execute(
+            'SELECT COUNT(*) AS n, '
+            'COALESCE(AVG(score_home + score_away), 0) AS avg_goals '
+            'FROM matches WHERE DATE(played_on) BETWEEN %s AND %s',
+            (date_from, date_to))
+        match_row = cur.fetchone()
+        total_matches: int = match_row['n']  # type: ignore[index]
+        avg_goals: float = round(float(match_row['avg_goals']), 1)  # type: ignore[index]
+
+        cur.execute(
+            'SELECT COUNT(DISTINCT p.user_id) AS n FROM ('
+            '  SELECT profile_id_home AS pid FROM matches WHERE DATE(played_on) BETWEEN %s AND %s '
+            '  UNION '
+            '  SELECT profile_id_away FROM matches WHERE DATE(played_on) BETWEEN %s AND %s '
+            ') ids JOIN profiles p ON p.id = ids.pid',
+            (date_from, date_to, date_from, date_to))
+        active_users: int = cur.fetchone()['n']  # type: ignore[index]
+
+        cur.execute(
+            'SELECT COUNT(*) AS n FROM user_registrations '
+            'WHERE DATE(registered_at) BETWEEN %s AND %s',
+            (date_from, date_to))
+        new_users: int = cur.fetchone()['n']  # type: ignore[index]
+
+    return {
+        'total_matches': total_matches,
+        'active_users': active_users,
+        'new_users': new_users,
+        'avg_goals_per_match': avg_goals,
+    }
