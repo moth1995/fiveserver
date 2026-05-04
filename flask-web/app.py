@@ -1,6 +1,7 @@
 """Flask application factory for the fiveserver web layer."""
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 
@@ -30,8 +31,26 @@ def create_app(
         admin_config_path or os.path.join(repo_root, 'etc', 'conf', 'admin.yaml'),
     )
     app.config['FS_CONFIG'] = cfg
-    app.config['ADMIN_USER'] = os.environ.get('ADMIN_USER', cfg.get('AdminUser', 'fives'))
-    app.config['ADMIN_PASSWORD'] = os.environ.get('ADMIN_PASSWORD', cfg.get('AdminPassword', 'fives'))
+    # Credentials come from admin.yaml (AdminUser / AdminPassword).
+    # No env var override — edit admin.yaml to change credentials.
+    app.config['ADMIN_USER'] = cfg.get('AdminUser', 'fives')
+    app.config['ADMIN_PASSWORD'] = cfg.get('AdminPassword', 'fives')
+
+    # ------------------------------------------------------------------
+    # File logging (FiveserverLogFile from admin.yaml)
+    # ------------------------------------------------------------------
+    log_file: str = cfg.get('WebserverLogFile', '')
+    if log_file:
+        if not os.path.isabs(log_file):
+            log_file = os.path.join(repo_root, log_file)
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        file_handler = logging.FileHandler(log_file, encoding='utf-8')
+        file_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s] %(levelname)s %(name)s: %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+        ))
+        app.logger.addHandler(file_handler)
+        logging.getLogger().addHandler(file_handler)
 
     # Banned IP list for registration endpoint
     banned_specs: list[str] = []
@@ -44,7 +63,7 @@ def create_app(
             if os.path.exists(banned_file):
                 with open(banned_file, encoding='utf-8') as f:
                     banned_data = _yaml.safe_load(f) or {}
-                banned_specs = banned_data.get('Banned', [])
+                banned_specs = banned_data.get('Banned') or []
     except Exception:
         pass
     app.config['BANNED_LIST'] = make_fast_banned_list(banned_specs)
