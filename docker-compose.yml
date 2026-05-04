@@ -1,0 +1,102 @@
+services:
+
+  db:
+    image: ${MYSQL_IMAGE:-mysql:8.0}
+    restart: unless-stopped
+    networks:
+      - fiveserver
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME:-fiveserver}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+      - ./sql/metrics.sql:/docker-entrypoint-initdb.d/02_metrics.sql:ro
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: ${HC_INTERVAL:-5s}
+      timeout: ${HC_TIMEOUT:-5s}
+      retries: ${HC_RETRIES:-12}
+
+  fiveserver:
+    build:
+      context: ./fiveserver-go
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT_NEWS_PES5:-16001}:16001"    # PES5
+      - "${PORT_NEWS_WE9:-18001}:18001"     # WE9
+      - "${PORT_NEWS_WE9LE:-19501}:19501"   # WE9LE
+      - "${PORT_MAIN:-20100}:20100"         # MainService
+      - "${PORT_MENU:-20101}:20101"         # NetworkMenuService
+      - "${PORT_LOGIN_PES5:-20102}:20102"   # LoginService PES5
+      - "${PORT_LOGIN_WE9:-20103}:20103"    # LoginService WE9
+      - "${PORT_LOGIN_WE9LE:-20104}:20104"  # LoginService WE9LE
+      - "${PORT_ADMIN:-8181}:8181"          # Admin API — localhost only
+    volumes:
+      - ./etc/conf/fiveserver.yaml:/app/config/fiveserver.yaml:ro
+      - ./etc/conf/admin.yaml:/app/config/admin.yaml:ro
+      - ./etc/data:/app/etc/data:ro
+    command:
+      - "-config=/app/config/fiveserver.yaml"
+      - "-admin-config=/app/config/admin.yaml"
+    networks:
+      - fiveserver
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: flask-web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${PORT_HTTP:-80}:80"
+      - "${PORT_HTTPS:-443}:443"
+    environment:
+      DB_HOST: ${DB_HOST:-db}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_NAME: ${DB_NAME:-fiveserver}
+    volumes:
+      - ./etc/conf/fiveserver.yaml:/app/etc/conf/fiveserver.yaml:ro
+      - ./etc/conf/admin.yaml:/app/etc/conf/admin.yaml:ro
+      - ./etc/keys:/app/etc/keys:ro
+    networks:
+      - fiveserver
+    depends_on:
+      db:
+        condition: service_healthy
+
+# ---------------------------------------------------------------------------
+# TLS example — enable HTTPS on the web service
+#
+# 1. Place your certificate and key under etc/keys/:
+#      etc/keys/servercert.pem
+#      etc/keys/serverkey.pem
+#
+# 2. Set useSecure: true in etc/conf/fiveserver.yaml:
+#      WebInterface:
+#        useSecure: true
+#        port: 80          # HTTP → HTTPS redirect
+#        securePort: 443   # HTTPS listener
+#
+# 3. (Optional) Override cert paths via .env if filenames differ:
+#      CERT_FILE=/app/etc/keys/mycert.pem
+#      KEY_FILE=/app/etc/keys/mykey.pem
+#    Then add to the web service environment block:
+#      CERT_FILE: ${CERT_FILE}
+#      KEY_FILE:  ${KEY_FILE}
+#
+# The etc/keys volume is already mounted at /app/etc/keys — no extra changes needed.
+# ---------------------------------------------------------------------------
+
+networks:
+  fiveserver:
+    driver: bridge
+
+volumes:
+  db_data:
