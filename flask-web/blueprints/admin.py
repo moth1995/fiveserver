@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import json
 import os
 import random
@@ -25,45 +24,58 @@ from db import (
 )
 from flask import (
     Blueprint,
-    Response,
     abort,
     current_app,
-    make_response,
     redirect,
     render_template,
     request,
+    session,
     url_for,
 )
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+_OPEN_ENDPOINTS = {"admin.login", "admin.logout"}
 
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
 
 
-def _require_auth() -> Response | None:
-    """Check Authorization: Basic header. Returns 401 response if missing/wrong."""
-    auth_header: str | None = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Basic "):
-        try:
-            decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-            username, _, password = decoded.partition(":")
-            if (
-                username == current_app.config["ADMIN_USER"]
-                and password == current_app.config["ADMIN_PASSWORD"]
-            ):
-                return None
-        except Exception:
-            pass
-    resp: Response = make_response("Unauthorized", 401)
-    resp.headers["WWW-Authenticate"] = 'Basic realm="fiveserver"'
-    return resp
+def _is_logged_in() -> bool:
+    return session.get("admin_logged_in") is True
 
 
 @admin_bp.before_request
-def check_auth() -> Response | None:
-    return _require_auth()
+def check_auth():
+    if request.endpoint in _OPEN_ENDPOINTS:
+        return None
+    if not _is_logged_in():
+        return redirect(url_for("admin.login", next=request.path))
+    return None
+
+
+@admin_bp.route("/login", methods=["GET", "POST"])
+def login():
+    if _is_logged_in():
+        return redirect(url_for("admin.home"))
+    error: str | None = None
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+        if (username == current_app.config["ADMIN_USER"] and
+                password == current_app.config["ADMIN_PASSWORD"]):
+            session["admin_logged_in"] = True
+            next_url = request.args.get("next") or url_for("admin.home")
+            return redirect(next_url)
+        error = "Invalid username or password."
+    return render_template("admin/login.html", error=error)
+
+
+@admin_bp.route("/logout")
+def logout():
+    session.pop("admin_logged_in", None)
+    return redirect(url_for("admin.login"))
 
 
 # ---------------------------------------------------------------------------
