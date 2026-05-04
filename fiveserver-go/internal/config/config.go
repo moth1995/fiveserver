@@ -220,6 +220,35 @@ type bannedFile struct {
 	Banned []string `yaml:"Banned"`
 }
 
+// ---- AdminConfig ------------------------------------------------------------
+
+// AdminConfig holds settings from admin.yaml (separate from fiveserver.yaml).
+type AdminConfig struct {
+	AdminPort         int    `yaml:"AdminPort"`
+	AdminUser         string `yaml:"AdminUser"`
+	AdminPassword     string `yaml:"AdminPassword"`
+	KeysDirectory     string `yaml:"KeysDirectory"`
+	FiveserverLogFile string `yaml:"FiveserverLogFile"`
+	FiveserverWebPort int    `yaml:"FiveserverWebPort"`
+}
+
+// LoadAdmin parses the admin YAML file. Returns a zero-value AdminConfig (no
+// error) if the file is absent so the server can start without an admin config.
+func LoadAdmin(path string) (*AdminConfig, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return &AdminConfig{}, nil
+		}
+		return nil, fmt.Errorf("config: read admin %s: %w", path, err)
+	}
+	var ac AdminConfig
+	if err := yaml.Unmarshal(data, &ac); err != nil {
+		return nil, fmt.Errorf("config: parse admin %s: %w", path, err)
+	}
+	return &ac, nil
+}
+
 // ---- Load -------------------------------------------------------------------
 
 // Load parses the YAML file at path into a Config. If MaxUsers is not set it
