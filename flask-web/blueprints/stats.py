@@ -1,18 +1,17 @@
-"""Stats blueprint: metrics dashboard. Same BasicAuth as admin. Read-only."""
+"""Stats blueprint: metrics dashboard. Shares admin session auth."""
 from __future__ import annotations
 
-import base64
 import calendar
 from datetime import date, timedelta
 from typing import Any
 
 from flask import (
     Blueprint,
-    Response,
-    current_app,
-    make_response,
+    redirect,
     render_template,
     request,
+    session,
+    url_for,
 )
 
 from db import (
@@ -26,29 +25,15 @@ from db import (
 stats_bp = Blueprint('stats', __name__, url_prefix='/stats')
 
 # ---------------------------------------------------------------------------
-# Authentication (mirrors admin)
+# Authentication — shared with admin (same session key)
 # ---------------------------------------------------------------------------
 
 
-def _require_auth() -> Response | None:
-    auth_header: str | None = request.headers.get('Authorization')
-    if auth_header and auth_header.startswith('Basic '):
-        try:
-            decoded = base64.b64decode(auth_header[6:]).decode('utf-8')
-            username, _, password = decoded.partition(':')
-            if (username == current_app.config['ADMIN_USER'] and
-                    password == current_app.config['ADMIN_PASSWORD']):
-                return None
-        except Exception:
-            pass
-    resp: Response = make_response('Unauthorized', 401)
-    resp.headers['WWW-Authenticate'] = 'Basic realm="fiveserver"'
-    return resp
-
-
 @stats_bp.before_request
-def check_auth() -> Response | None:
-    return _require_auth()
+def check_auth():
+    if not session.get('admin_logged_in'):
+        return redirect(url_for('admin.login', next=request.path))
+    return None
 
 
 # ---------------------------------------------------------------------------
