@@ -37,7 +37,9 @@ NetworkServer:
         we9le: 20104
 
 WebInterface:
-    port: 8180
+    port: 80
+    securePort: 443
+    useSecure: false
 
 Debug:
     false
