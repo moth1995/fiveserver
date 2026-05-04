@@ -4,3 +4,4 @@ __pycache__
 etc/data/*.yaml
 .claude/
 .venv
+.env
