@@ -20,7 +20,8 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "etc/conf/fiveserver.yaml", "path to fiveserver.yaml")
+	configPath := flag.String("config", "./etc/conf/fiveserver.yaml", "path to fiveserver.yaml")
+	adminConfigPath := flag.String("admin-config", "./etc/conf/admin.yaml", "path to admin.yaml")
 	flag.Parse()
 
 	// ---- 0. Pre-config logger (stdout, info) -----------------------------------
@@ -36,9 +37,25 @@ func main() {
 	}
 	logger.Infof("fiveserver: loaded config from %s", *configPath)
 
+	adminCfg, err := config.LoadAdmin(*adminConfigPath)
+	if err != nil {
+		logger.Criticalf("config: %v", err)
+		os.Exit(1)
+	}
+	if adminCfg.AdminPort != 0 {
+		logger.Infof("fiveserver: loaded admin config from %s (AdminPort=%d)", *adminConfigPath, adminCfg.AdminPort)
+	} else {
+		logger.Warnf("fiveserver: admin config not found or AdminPort not set (%s) — admin API disabled", *adminConfigPath)
+	}
+
 	// ---- 1b. Re-init logger with configured file and level ---------------------
-	if err := logger.Init(cfg.Log.Level, cfg.Log.File); err != nil {
-		logger.Warnf("fiveserver: could not open log file %q: %v — continuing with stdout only", cfg.Log.File, err)
+	// FiveserverLogFile from admin.yaml takes precedence over Log.File from fiveserver.yaml.
+	logFile := adminCfg.FiveserverLogFile
+	if logFile == "" {
+		logFile = cfg.Log.File
+	}
+	if err := logger.Init(cfg.Log.Level, logFile); err != nil {
+		logger.Warnf("fiveserver: could not open log file %q: %v — continuing with stdout only", logFile, err)
 	}
 
 	cfg.ResolveServerIP()
@@ -76,9 +93,9 @@ func main() {
 		listenOn = "0.0.0.0"
 	}
 
-	// Admin HTTP server
-	if cfg.WebInterface.AdminPort != 0 {
-		adminAddr := fmt.Sprintf("%s:%d", listenOn, cfg.WebInterface.AdminPort)
+	// Admin HTTP server — port comes from admin.yaml AdminPort
+	if adminCfg.AdminPort != 0 {
+		adminAddr := fmt.Sprintf("%s:%d", listenOn, adminCfg.AdminPort)
 		go func() {
 			adminSrv := admin.NewServer(hub, cfg, *configPath)
 			if err := adminSrv.ListenAndServe(adminAddr); err != nil {

@@ -19,9 +19,10 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /out/fiveserver /app/fiveserver
-COPY config /app/config
 
 EXPOSE 16001 18001 19501 20100 20101 20102 20103 20104
 
+# Config must be mounted at runtime, e.g.:
+#   -v ./etc/conf/fiveserver.yaml:/app/config/fiveserver.yaml:ro
 ENTRYPOINT ["/app/fiveserver"]
 CMD ["-config", "/app/config/fiveserver.yaml"]
