@@ -28,6 +28,7 @@ func NewServer(hub *protocol.Hub, cfg *config.Config, configPath string) *Server
 func (srv *Server) ListenAndServe(addr string) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /admin/chat", srv.handleBroadcast)
+	mux.HandleFunc("GET /admin/chat", srv.handleChatHistory)
 	mux.HandleFunc("POST /admin/kick", srv.handleKick)
 	mux.HandleFunc("GET /admin/config", srv.handleGetConfig)
 	mux.HandleFunc("POST /admin/reload-config", srv.handleReloadConfig)
@@ -39,9 +40,11 @@ func (srv *Server) ListenAndServe(addr string) error {
 
 // broadcastRequest is the JSON body for POST /api/chat.
 // lobby is optional; when omitted the message is sent to all lobbies.
+// from is optional; defaults to "admin".
 type broadcastRequest struct {
 	Message string `json:"message"`
 	Lobby   string `json:"lobby"` // optional lobby name
+	From    string `json:"from"`  // sender name shown in chat
 }
 
 // handleBroadcast handles POST /api/chat
@@ -59,11 +62,17 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fromName := req.From
+	if fromName == "" {
+		fromName = "admin"
+	}
+	fromProfile := &model.Profile{Name: fromName}
+
 	sent := 0
 	if req.Lobby != "" {
 		for _, l := range srv.hub.Lobbies() {
 			if l.Name == req.Lobby {
-				protocol.BroadcastSystemChat(srv.hub, l, req.Message)
+				protocol.BroadcastFromProfile(srv.hub, l, fromProfile, req.Message)
 				sent++
 				break
 			}
@@ -74,7 +83,7 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		for _, l := range srv.hub.Lobbies() {
-			protocol.BroadcastSystemChat(srv.hub, l, req.Message)
+			protocol.BroadcastFromProfile(srv.hub, l, fromProfile, req.Message)
 			sent++
 		}
 	}
@@ -260,6 +269,49 @@ func (srv *Server) handleLobbyStats(w http.ResponseWriter, r *http.Request) {
 		out = append(out, entry)
 	}
 
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{"lobbies": out})
+}
+
+// handleChatHistory handles GET /admin/chat
+// Optional query param: ?lobby=<name> to filter to one lobby.
+// Returns: {"lobbies": [{"name": "...", "messages": [{"from":"...","text":"...","timestamp":"..."}]}]}
+func (srv *Server) handleChatHistory(w http.ResponseWriter, r *http.Request) {
+	type msgEntry struct {
+		From      string `json:"from"`
+		Text      string `json:"text"`
+		Timestamp string `json:"timestamp"`
+	}
+	type lobbyEntry struct {
+		Name     string     `json:"name"`
+		Messages []msgEntry `json:"messages"`
+	}
+
+	filter := r.URL.Query().Get("lobby")
+	out := make([]lobbyEntry, 0)
+	for _, l := range srv.hub.Lobbies() {
+		if filter != "" && l.Name != filter {
+			continue
+		}
+		msgs := l.ChatHistory()
+		entries := make([]msgEntry, 0, len(msgs))
+		for _, m := range msgs {
+			from := ""
+			if m.From != nil {
+				from = m.From.Name
+			}
+			entries = append(entries, msgEntry{
+				From:      from,
+				Text:      m.Text,
+				Timestamp: m.Timestamp.UTC().Format(time.RFC3339),
+			})
+		}
+		out = append(out, lobbyEntry{Name: l.Name, Messages: entries})
+	}
+	if filter != "" && len(out) == 0 {
+		http.Error(w, fmt.Sprintf("lobby %q not found", filter), http.StatusNotFound)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"lobbies": out})
 }
