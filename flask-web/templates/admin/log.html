@@ -46,11 +46,16 @@
 
   function renderLines(lines) {
     var html = '';
+    var lastCls = 'll-info';
     for (var i = 0; i < lines.length; i++) {
-      // slog escapes real newlines as literal \n — expand them back
-      var expanded = lines[i].replace(/\\n/g, '\n');
-      var cls = classify(lines[i]);
-      html += '<span class="' + cls + '">' + escape(expanded) + '</span>\n';
+      var line = lines[i];
+      var cls = classify(line);
+      if (cls === 'll-info' && line.indexOf('level=') === -1) {
+        cls = lastCls; // continuation line (e.g. hex dump row) — inherit parent level
+      } else {
+        lastCls = cls;
+      }
+      html += '<span class="' + cls + '">' + escape(line) + '</span>\n';
     }
     return html;
   }

@@ -1,12 +1,14 @@
 package logger
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 const LevelCritical = slog.Level(12)
@@ -15,14 +17,10 @@ var (
 	currentLevel slog.LevelVar
 	global       *slog.Logger
 	mu           sync.RWMutex
-	initOnce     sync.Once
 )
 
 func init() {
-	global = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level:       &currentLevel,
-		ReplaceAttr: replaceAttr,
-	}))
+	global = slog.New(newPlainHandler(os.Stdout, &currentLevel))
 	currentLevel.Set(slog.LevelInfo)
 }
 
@@ -46,10 +44,7 @@ func Init(level, filePath string) error {
 	}
 
 	currentLevel.Set(parseLevel(level))
-	global = slog.New(slog.NewTextHandler(w, &slog.HandlerOptions{
-		Level:       &currentLevel,
-		ReplaceAttr: replaceAttr,
-	}))
+	global = slog.New(newPlainHandler(w, &currentLevel))
 	return nil
 }
 
@@ -73,14 +68,37 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
-func replaceAttr(_ []string, a slog.Attr) slog.Attr {
-	if a.Key == slog.LevelKey {
-		if lvl, ok := a.Value.Any().(slog.Level); ok && lvl == LevelCritical {
-			a.Value = slog.StringValue("CRITICAL")
-		}
-	}
-	return a
+// plainHandler writes log records without escaping newlines in the message,
+// so multiline messages (e.g. hex dumps) render as real line breaks.
+type plainHandler struct {
+	w     io.Writer
+	level slog.Leveler
+	wmu   sync.Mutex
 }
+
+func newPlainHandler(w io.Writer, level slog.Leveler) *plainHandler {
+	return &plainHandler{w: w, level: level}
+}
+
+func (h *plainHandler) Enabled(_ context.Context, l slog.Level) bool {
+	return l >= h.level.Level()
+}
+
+func (h *plainHandler) Handle(_ context.Context, r slog.Record) error {
+	lvl := r.Level.String()
+	if r.Level == LevelCritical {
+		lvl = "CRITICAL"
+	}
+	ts := r.Time.UTC().Format(time.RFC3339Nano)
+	line := fmt.Sprintf("time=%s level=%s %s\n", ts, lvl, r.Message)
+	h.wmu.Lock()
+	defer h.wmu.Unlock()
+	_, err := io.WriteString(h.w, line)
+	return err
+}
+
+func (h *plainHandler) WithAttrs(_ []slog.Attr) slog.Handler  { return h }
+func (h *plainHandler) WithGroup(_ string) slog.Handler        { return h }
 
 func get() *slog.Logger {
 	mu.RLock()
