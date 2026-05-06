@@ -66,3 +66,18 @@ func TestUnblockProfile_NoServer_ReturnsError(t *testing.T) {
 		t.Fatal("expected error when no server available")
 	}
 }
+
+func TestGetFriendsAndBlockedForProfile_NilSC_ReturnsErrNoDB(t *testing.T) {
+	_, err := db.GetFriendsAndBlockedForProfile(context.Background(), nil, 1)
+	if err != db.ErrNoDB {
+		t.Fatalf("expected ErrNoDB, got %v", err)
+	}
+}
+
+func TestGetFriendsAndBlockedForProfile_NoServer_ReturnsError(t *testing.T) {
+	sc := newSC(t)
+	_, err := db.GetFriendsAndBlockedForProfile(context.Background(), sc, 1)
+	if err == nil {
+		t.Fatal("expected error when no server available")
+	}
+}

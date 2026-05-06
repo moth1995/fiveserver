@@ -271,6 +271,44 @@ func TestDo3120_SendsTwoPackets(t *testing.T) {
 	}
 }
 
+// ---- 0x3f01 authenticate WE9LE (no DB) --------------------------------------
+
+func TestAuthenticate3f01_ShortPacket_Sends3f02Error(t *testing.T) {
+	hub := loginHub(100)
+	d := protocol.NewLoginDispatcher(hub, nil, "we9le")
+	s, cap := newCaptureSession(hub)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3f01}, Data: []byte{1, 2, 3}}
+	_ = d.Dispatch(s, pkt)
+
+	if len(cap.sends) != 1 || cap.sends[0].id != 0x3f02 {
+		t.Fatalf("expected 0x3f02 error response, got %+v", cap.sends)
+	}
+	code := binary.BigEndian.Uint32(cap.sends[0].data)
+	if code != 0xffffff10 {
+		t.Errorf("error code = 0x%08x, want 0xffffff10", code)
+	}
+}
+
+func TestAuthenticate3f01_UnknownUser_Sends3f02Error(t *testing.T) {
+	hub := loginHub(100)
+	// 64-byte valid-length but all-zero payload → decrypts, but user not in DB (nil sc)
+	d := protocol.NewLoginDispatcher(hub, nil, "we9le")
+	s, cap := newCaptureSession(hub)
+
+	data := make([]byte, 64)
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3f01}, Data: data}
+	_ = d.Dispatch(s, pkt)
+
+	if len(cap.sends) != 1 || cap.sends[0].id != 0x3f02 {
+		t.Fatalf("expected 0x3f02 response, got %+v", cap.sends)
+	}
+	code := binary.BigEndian.Uint32(cap.sends[0].data)
+	if code != 0xffffff10 {
+		t.Errorf("error code = 0x%08x, want 0xffffff10", code)
+	}
+}
+
 // ---- 0x0003 disconnect ------------------------------------------------------
 
 func TestDisconnect_RemovesSession(t *testing.T) {

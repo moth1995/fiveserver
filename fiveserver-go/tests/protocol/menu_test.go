@@ -386,7 +386,7 @@ func TestDo3080_SendsTwoPackets(t *testing.T) {
 
 // ---- 0x4580 / 0x4600 / 0x4780 stubs ----------------------------------------
 
-func TestGetFriends_SendsTwoPackets(t *testing.T) {
+func TestGetFriends_SendsThreePackets(t *testing.T) {
 	hub := menuHub(100)
 	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
 	s, cap := newCaptureSession(hub)
@@ -394,8 +394,9 @@ func TestGetFriends_SendsTwoPackets(t *testing.T) {
 	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4580}}
 	_ = d.Dispatch(s, pkt)
 
-	if len(cap.sends) != 2 || cap.sends[0].id != 0x4581 || cap.sends[1].id != 0x4583 {
-		t.Errorf("expected 0x4581+0x4583, got %+v", cap.sends)
+	// Python sends 0x4581 → 0x4582 (empty) → 0x4583
+	if len(cap.sends) != 3 || cap.sends[0].id != 0x4581 || cap.sends[1].id != 0x4582 || cap.sends[2].id != 0x4583 {
+		t.Errorf("expected 0x4581+0x4582+0x4583, got %+v", cap.sends)
 	}
 }
 
@@ -552,3 +553,161 @@ func TestFormatPlayerInfo_SizeIs31Bytes(t *testing.T) {
 	_ = cap
 	_ = s
 }
+
+// ---- 0x3080 getFriendsAndBlocked --------------------------------------------
+
+func TestDo3080_NoFriends_SendsBeginAndEnd(t *testing.T) {
+	hub := menuHub(100)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	s, cap := newCaptureSession(hub)
+	s.User = &model.ConnectedUser{
+		User:    &model.User{Hash: "u1"},
+		Profile: &model.Profile{ID: 1, Name: "Player1"},
+	}
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3080}}
+	if err := d.Dispatch(s, pkt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	// With nil sc, DB call returns ErrNoDB → zero entries → only 0x3082 + 0x3086
+	if len(cap.sends) != 2 {
+		t.Fatalf("expected 2 sends (0x3082 + 0x3086), got %d: %+v", len(cap.sends), cap.sends)
+	}
+	if cap.sends[0].id != 0x3082 {
+		t.Errorf("send[0].id = 0x%04x, want 0x3082", cap.sends[0].id)
+	}
+	if cap.sends[1].id != 0x3086 {
+		t.Errorf("send[1].id = 0x%04x, want 0x3086", cap.sends[1].id)
+	}
+}
+
+// ---- 0x4580 getFriendsMatchState --------------------------------------------
+
+func TestGetFriends4580_SendsThreePackets(t *testing.T) {
+	hub := menuHub(100)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	s, cap := newCaptureSession(hub)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4580}}
+	if err := d.Dispatch(s, pkt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(cap.sends) != 3 {
+		t.Fatalf("expected 3 sends, got %d: %+v", len(cap.sends), cap.sends)
+	}
+	want := []uint16{0x4581, 0x4582, 0x4583}
+	for i, w := range want {
+		if cap.sends[i].id != w {
+			t.Errorf("send[%d].id = 0x%04x, want 0x%04x", i, cap.sends[i].id, w)
+		}
+	}
+}
+
+// ---- 0x4600 searchPlayers ---------------------------------------------------
+
+func TestSearchPlayers4600_EmptyResults_SendsBeginAndEnd(t *testing.T) {
+	hub := menuHub(100)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	s, cap := newCaptureSession(hub)
+	s.User = &model.ConnectedUser{
+		User:    &model.User{Hash: "u1"},
+		Profile: &model.Profile{ID: 1, Name: "Player1"},
+	}
+
+	// searchType=0, name="NoOne" — with nil sc DB returns error → empty results
+	data := make([]byte, 17)
+	data[0] = 0 // exact match
+	copy(data[1:], []byte("NoOne"))
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4600}, Data: data}
+	if err := d.Dispatch(s, pkt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	// Expects 0x4601 (clean) + 0x4603 (end), no 0x4602 (no results)
+	if len(cap.sends) != 2 {
+		t.Fatalf("expected 2 sends (0x4601 + 0x4603), got %d: %+v", len(cap.sends), cap.sends)
+	}
+	if cap.sends[0].id != 0x4601 {
+		t.Errorf("send[0].id = 0x%04x, want 0x4601", cap.sends[0].id)
+	}
+	if cap.sends[1].id != 0x4603 {
+		t.Errorf("send[1].id = 0x%04x, want 0x4603", cap.sends[1].id)
+	}
+}
+
+func TestSearchPlayers4600_ShortData_SendsBeginAndEnd(t *testing.T) {
+	hub := menuHub(100)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	s, cap := newCaptureSession(hub)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4600}, Data: []byte{0}}
+	_ = d.Dispatch(s, pkt)
+
+	// too short (< 17 bytes) → 0x4601 + 0x4603 only
+	ids := make([]uint16, len(cap.sends))
+	for i, send := range cap.sends {
+		ids[i] = send.id
+	}
+	found4601, found4603 := false, false
+	for _, id := range ids {
+		if id == 0x4601 {
+			found4601 = true
+		}
+		if id == 0x4603 {
+			found4603 = true
+		}
+	}
+	if !found4601 || !found4603 {
+		t.Errorf("expected 0x4601 and 0x4603, got %v", ids)
+	}
+}
+
+// ---- 0x3f01 WE9LE — verify registered in menu dispatcher --------------------
+
+func TestMenuDispatcher_Has3f01Handler(t *testing.T) {
+	hub := menuHub(100)
+	d := protocol.NewMenuDispatcher(hub, nil, "we9le")
+	s, cap := newCaptureSession(hub)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3f01}, Data: []byte{1, 2, 3}}
+	_ = d.Dispatch(s, pkt)
+
+	// Short data → decrypt fails → 0x3f02 with error code (not default echo 0x3f02 zeros)
+	found := false
+	for _, send := range cap.sends {
+		if send.id == 0x3f02 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 0x3f02 response in menu dispatcher, got %+v", cap.sends)
+	}
+}
+
+// ---- 0x3f01 entry format check (binary.BigEndian usage) ---------------------
+
+func TestAuthenticate3f01_ResponseID_Is3f02(t *testing.T) {
+	hub := loginHub(100)
+	d := protocol.NewLoginDispatcher(hub, nil, "we9le")
+	s, cap := newCaptureSession(hub)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3f01}, Data: make([]byte, 64)}
+	_ = d.Dispatch(s, pkt)
+
+	if len(cap.sends) == 0 {
+		t.Fatal("expected at least 1 response")
+	}
+	if cap.sends[0].id != 0x3f02 {
+		t.Errorf("response ID = 0x%04x, want 0x3f02", cap.sends[0].id)
+	}
+	// Must not respond with 0x3004 (that would be PES5/WE9)
+	for _, send := range cap.sends {
+		if send.id == 0x3004 {
+			t.Error("got 0x3004 response for 0x3f01 — wrong auth variant")
+		}
+	}
+}
+
