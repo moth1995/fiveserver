@@ -376,33 +376,46 @@ def api_chat():
 # ---------------------------------------------------------------------------
 
 
+def _read_log_lines(selected: str, n_lines: int) -> list[str]:
+    cfg = current_app.config["FS_CONFIG"]
+    log_keys = {"fiveserver": "FiveserverLogFile", "webserver": "WebserverLogFile"}
+    log_file: str = cfg.get(log_keys.get(selected, "FiveserverLogFile"), "")
+    if not log_file:
+        return []
+    repo_root = current_app.config['REPO_ROOT']
+    if not os.path.isabs(log_file):
+        log_file = os.path.join(repo_root, log_file)
+    logger.debug("Log viewer reading: %s", log_file)
+    try:
+        with open(log_file, encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+        return [l.rstrip("\n") for l in all_lines[-n_lines:]]
+    except OSError:
+        return ["(log file not found or unreadable)"]
+
+
 @admin_bp.route("/log")
 def log() -> str:
     n_lines: int = int(request.args.get("lines", 30))
     n_lines = min(n_lines, 5000)
 
-    cfg = current_app.config["FS_CONFIG"]
-    log_keys = {"fiveserver": "FiveserverLogFile", "webserver": "WebserverLogFile"}
-
     selected = request.args.get("log", session.get("log_preference", "fiveserver"))
-    if selected not in log_keys:
+    if selected not in ("fiveserver", "webserver"):
         selected = "fiveserver"
     session["log_preference"] = selected
 
-    log_file: str = cfg.get(log_keys[selected], "")
-    lines: list[str] = []
-    if log_file:
-        repo_root = current_app.config['REPO_ROOT']
-        if not os.path.isabs(log_file):
-            log_file = os.path.join(repo_root, log_file)
-        logger.debug("Log viewer reading: %s", log_file)
-        try:
-            with open(log_file, encoding="utf-8", errors="replace") as f:
-                all_lines = f.readlines()
-            lines = [l.rstrip("\n") for l in all_lines[-n_lines:]]
-        except OSError:
-            lines = ["(log file not found or unreadable)"]
-    return render_template("admin/log.html", lines=lines, line_count=n_lines, selected_log=selected)
+    return render_template("admin/log.html", line_count=n_lines, selected_log=selected)
+
+
+@admin_bp.route("/api/log")
+def api_log():
+    n_lines: int = int(request.args.get("lines", 30))
+    n_lines = min(n_lines, 5000)
+    selected = request.args.get("log", "fiveserver")
+    if selected not in ("fiveserver", "webserver"):
+        selected = "fiveserver"
+    lines = _read_log_lines(selected, n_lines)
+    return jsonify({"lines": lines, "selected_log": selected})
 
 
 # ---------------------------------------------------------------------------
