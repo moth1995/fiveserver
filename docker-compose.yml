@@ -1,7 +1,13 @@
+name: fiveserver
+
 services:
 
   db:
-    image: ${MYSQL_IMAGE:-mysql:8.0}
+    # For MariaDB (default): use mariadb:11
+    # For MySQL:             use mysql:8.0 and change healthcheck to:
+    #   test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+    image: ${MYSQL_IMAGE:-mariadb:11}
+    container_name: fiveserver-db
     restart: unless-stopped
     networks:
       - fiveserver
@@ -15,7 +21,7 @@ services:
       - ./sql/metrics.sql:/docker-entrypoint-initdb.d/02_metrics.sql:ro
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: ${HC_INTERVAL:-5s}
       timeout: ${HC_TIMEOUT:-5s}
       retries: ${HC_RETRIES:-12}
@@ -24,6 +30,7 @@ services:
     build:
       context: ./fiveserver-go
       dockerfile: Dockerfile
+    container_name: fiveserver
     restart: unless-stopped
     ports:
       - "${PORT_NEWS_PES5:-16001}:16001"    # PES5
@@ -34,11 +41,11 @@ services:
       - "${PORT_LOGIN_PES5:-20102}:20102"   # LoginService PES5
       - "${PORT_LOGIN_WE9:-20103}:20103"    # LoginService WE9
       - "${PORT_LOGIN_WE9LE:-20104}:20104"  # LoginService WE9LE
-      - "${PORT_ADMIN:-8181}:8181"          # Admin API — localhost only
     volumes:
       - ./etc/conf/fiveserver.yaml:/app/config/fiveserver.yaml:ro
       - ./etc/conf/admin.yaml:/app/config/admin.yaml:ro
       - ./etc/data:/app/etc/data:ro
+      - ./log:/app/log
     command:
       - "-config=/app/config/fiveserver.yaml"
       - "-admin-config=/app/config/admin.yaml"
@@ -52,21 +59,24 @@ services:
     build:
       context: .
       dockerfile: flask-web/Dockerfile
+    container_name: fiveserver-web
     restart: unless-stopped
     ports:
       - "${PORT_HTTP:-80}:80"
       - "${PORT_HTTPS:-443}:443"
     environment:
-      DB_HOST: ${DB_HOST:-db}
+      DB_HOST: ${DB_HOST:-fiveserver-db}
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-fiveserver}
     volumes:
-      - ./etc/conf/fiveserver.yaml:/app/etc/conf/fiveserver.yaml:ro
-      - ./etc/conf/admin.yaml:/app/etc/conf/admin.yaml:ro
+      - ./etc/conf/fiveserver.yaml:/app/etc/conf/fiveserver.yaml
+      - ./etc/conf/admin.yaml:/app/etc/conf/admin.yaml
       - ./etc/keys:/app/etc/keys:ro
+      - ./log:/app/log
     networks:
       - fiveserver
+      - my_net
     depends_on:
       db:
         condition: service_healthy
@@ -97,6 +107,8 @@ services:
 networks:
   fiveserver:
     driver: bridge
+  my_net:
+    external: true
 
 volumes:
   db_data:
