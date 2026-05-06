@@ -21,7 +21,7 @@ services:
       - ./sql/metrics.sql:/docker-entrypoint-initdb.d/02_metrics.sql:ro
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      test: ["CMD-SHELL", "mariadb-admin ping -hlocalhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
       interval: ${HC_INTERVAL:-5s}
       timeout: ${HC_TIMEOUT:-5s}
       retries: ${HC_RETRIES:-12}
