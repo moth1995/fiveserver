@@ -145,7 +145,7 @@ func GetLeaderboard(ctx context.Context, sc *StorageController, limit int) ([]*m
 	if err != nil {
 		return nil, fmt.Errorf("db/profile: leaderboard: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*model.Profile
 	for rows.Next() {
 		p, err := scanProfile(rows)
