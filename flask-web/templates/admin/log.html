@@ -4,25 +4,75 @@
 
 <form class="log-controls" method="GET" action="">
   <label>Log:</label>
-  <select name="log" onchange="this.form.submit()">
+  <select name="log" id="selLog" onchange="this.form.submit()">
     <option value="fiveserver" {% if selected_log == 'fiveserver' %}selected{% endif %}>Game server</option>
     <option value="webserver"  {% if selected_log == 'webserver'  %}selected{% endif %}>Web server</option>
   </select>
   <label>Show last:</label>
-  <select name="lines" onchange="this.form.submit()">
+  <select name="lines" id="selLines" onchange="this.form.submit()">
     {% for n in [30, 100, 500, 1000, 5000] %}
     <option value="{{ n }}" {% if n == line_count %}selected{% endif %}>{{ n }} lines</option>
     {% endfor %}
   </select>
 </form>
 
-<pre class="log-viewer" id="logViewer">{% for line in lines %}{% set ll = 'll-info' %}{% if 'level=DEBUG' in line %}{% set ll = 'll-debug' %}{% elif 'level=WARN' in line %}{% set ll = 'll-warn' %}{% elif 'level=ERROR' in line %}{% set ll = 'll-error' %}{% elif 'level=CRITICAL' in line %}{% set ll = 'll-critical' %}{% endif %}<span class="{{ ll }}">{{ line | e }}</span>
-{% endfor %}</pre>
+<pre class="log-viewer" id="logViewer"></pre>
 
 <script>
-(function() {
-  var el = document.getElementById('logViewer');
-  if (el) el.scrollTop = el.scrollHeight;
+(function () {
+  var viewer = document.getElementById('logViewer');
+  var logType = document.getElementById('selLog').value;
+  var lineCount = document.getElementById('selLines').value;
+  var apiUrl = '/admin/api/log?log=' + encodeURIComponent(logType) + '&lines=' + lineCount;
+
+  var LEVELS = {
+    'level=DEBUG':    'll-debug',
+    'level=INFO':     'll-info',
+    'level=WARN':     'll-warn',
+    'level=ERROR':    'll-error',
+    'level=CRITICAL': 'll-critical',
+  };
+
+  function classify(line) {
+    for (var k in LEVELS) {
+      if (line.indexOf(k) !== -1) return LEVELS[k];
+    }
+    return 'll-info';
+  }
+
+  function escape(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function renderLines(lines) {
+    var html = '';
+    for (var i = 0; i < lines.length; i++) {
+      // slog escapes real newlines as literal \n — expand them back
+      var expanded = lines[i].replace(/\\n/g, '\n');
+      var cls = classify(lines[i]);
+      html += '<span class="' + cls + '">' + escape(expanded) + '</span>\n';
+    }
+    return html;
+  }
+
+  function isAtBottom() {
+    return viewer.scrollTop + viewer.clientHeight >= viewer.scrollHeight - 60;
+  }
+
+  function refresh() {
+    fetch(apiUrl)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var atBottom = isAtBottom();
+        viewer.innerHTML = renderLines(data.lines);
+        if (atBottom) viewer.scrollTop = viewer.scrollHeight;
+      })
+      .catch(function() {});
+  }
+
+  // Initial load, then poll every 3 s
+  refresh();
+  setInterval(refresh, 3000);
 })();
 </script>
 
