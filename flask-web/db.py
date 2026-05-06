@@ -52,7 +52,9 @@ def teardown_db(exception: BaseException | None) -> None:
 # User queries  (ported from lib/fiveserver/data.py — UserData)
 # ---------------------------------------------------------------------------
 
-_USER_COLS = "id, username, serial, hash, reset_nonce, updated_on, deleted, total_online_seconds"
+_USER_COLS = (
+    "id, username, serial, hash, reset_nonce, updated_on, deleted, total_online_seconds"
+)
 
 
 def find_user_by_id(

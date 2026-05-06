@@ -42,15 +42,15 @@ def check_auth():
 # ---------------------------------------------------------------------------
 
 _PRESETS: list[dict[str, str]] = [
-    {"value": "today",        "label": "Today"},
-    {"value": "yesterday",    "label": "Yesterday"},
-    {"value": "last7",        "label": "Last 7 days"},
-    {"value": "last30",       "label": "Last 30 days"},
-    {"value": "this_month",   "label": "This month"},
-    {"value": "last_month",   "label": "Last month"},
-    {"value": "last3months",  "label": "Last 3 months"},
-    {"value": "last_year",    "label": "Last year"},
-    {"value": "custom",       "label": "Custom range"},
+    {"value": "today", "label": "Today"},
+    {"value": "yesterday", "label": "Yesterday"},
+    {"value": "last7", "label": "Last 7 days"},
+    {"value": "last30", "label": "Last 30 days"},
+    {"value": "this_month", "label": "This month"},
+    {"value": "last_month", "label": "Last month"},
+    {"value": "last3months", "label": "Last 3 months"},
+    {"value": "last_year", "label": "Last year"},
+    {"value": "custom", "label": "Custom range"},
 ]
 
 
@@ -119,7 +119,9 @@ def home() -> str:
     preset, date_from, date_to = _parse_filters()
 
     conn = get_db()
-    matches_per_day: list[dict[str, Any]] = stats_matches_per_day(conn, date_from, date_to)
+    matches_per_day: list[dict[str, Any]] = stats_matches_per_day(
+        conn, date_from, date_to
+    )
     max_daily: int = max((d["count"] for d in matches_per_day), default=1) or 1
     top_teams: list[dict[str, Any]] = stats_top_teams(conn, date_from, date_to)
     top_rosters: list[dict[str, Any]] = stats_top_rosters(conn, date_from, date_to)
