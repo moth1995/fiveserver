@@ -16,11 +16,31 @@ import (
 type Server struct {
 	hub        *protocol.Hub
 	cfg        *config.Config
+	adminCfg   *config.AdminConfig
 	configPath string
 }
 
-func NewServer(hub *protocol.Hub, cfg *config.Config, configPath string) *Server {
-	return &Server{hub: hub, cfg: cfg, configPath: configPath}
+func NewServer(hub *protocol.Hub, cfg *config.Config, adminCfg *config.AdminConfig, configPath string) *Server {
+	return &Server{hub: hub, cfg: cfg, adminCfg: adminCfg, configPath: configPath}
+}
+
+// basicAuth wraps a handler with HTTP Basic Auth using AdminUser/AdminPassword.
+// If credentials are empty the request is allowed through (no auth configured).
+func (srv *Server) basicAuth(next http.Handler) http.Handler {
+	user := srv.adminCfg.AdminUser
+	pass := srv.adminCfg.AdminPassword
+	if user == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		u, p, ok := r.BasicAuth()
+		if !ok || u != user || p != pass {
+			w.Header().Set("WWW-Authenticate", `Basic realm="fiveserver-admin"`)
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // ListenAndServe starts the HTTP server on addr (e.g. "0.0.0.0:8180").
@@ -35,7 +55,7 @@ func (srv *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("GET /stats/users", srv.handleUsers)
 	mux.HandleFunc("GET /lobby-stats", srv.handleLobbyStats)
 	logger.Infof("[admin] HTTP server listening on %s", addr)
-	return http.ListenAndServe(addr, mux)
+	return http.ListenAndServe(addr, srv.basicAuth(mux))
 }
 
 // broadcastRequest is the JSON body for POST /api/chat.
