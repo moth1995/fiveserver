@@ -54,7 +54,11 @@ func main() {
 	if logFile == "" {
 		logFile = cfg.Log.File
 	}
-	if err := logger.Init(cfg.Log.Level, logFile); err != nil {
+	logLevel := cfg.Log.Level
+	if cfg.Debug && logLevel != "debug" {
+		logLevel = "debug"
+	}
+	if err := logger.Init(logLevel, logFile); err != nil {
 		logger.Warnf("fiveserver: could not open log file %q: %v — continuing with stdout only", logFile, err)
 	}
 

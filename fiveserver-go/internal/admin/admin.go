@@ -230,7 +230,11 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	logger.SetLevel(srv.cfg.Log.Level)
+	level := srv.cfg.Log.Level
+	if srv.cfg.Debug && level != "debug" {
+		level = "debug"
+	}
+	logger.SetLevel(level)
 	logger.Infof("[admin] config reloaded: %d change(s)", len(changes))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
