@@ -65,11 +65,12 @@ def create_app(
                     banned_data = _yaml.safe_load(f) or {}
                 banned_specs = banned_data.get('Banned') or []
     except Exception:
-        pass
+        logging.getLogger(__name__).error('Failed to load banned list', exc_info=True)
     app.config['BANNED_LIST'] = make_fast_banned_list(banned_specs)
 
     # Flask secret key (for sessions / CSRF in Phase 2)
-    app.secret_key = os.environ.get('FLASK_SECRET', cfg.get('FlaskSecretKey', secrets.token_hex(32)))
+    _default_secret = cfg.get('FlaskSecretKey', secrets.token_hex(32))
+    app.secret_key = os.environ.get('FLASK_SECRET', _default_secret)
 
     # ------------------------------------------------------------------
     # Template filters
