@@ -16,7 +16,8 @@
   </select>
 </form>
 
-<pre class="log-viewer" id="logViewer">{{ lines | join('\n') | e }}</pre>
+<pre class="log-viewer" id="logViewer">{% for line in lines %}{% set ll = 'll-info' %}{% if 'level=DEBUG' in line %}{% set ll = 'll-debug' %}{% elif 'level=WARN' in line %}{% set ll = 'll-warn' %}{% elif 'level=ERROR' in line %}{% set ll = 'll-error' %}{% elif 'level=CRITICAL' in line %}{% set ll = 'll-critical' %}{% endif %}<span class="{{ ll }}">{{ line | e }}</span>
+{% endfor %}</pre>
 
 <script>
 (function() {
