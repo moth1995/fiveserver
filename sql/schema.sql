@@ -77,6 +77,20 @@ create table if not exists blocked (
 
 ) Engine=InnoDB default charset=utf8;
 
+create table if not exists messages (
+    id      bigint unsigned not null auto_increment,
+    from_id int unsigned not null,
+    to_id   int unsigned not null,
+    body    varchar(512) not null default '',
+    sent_at datetime not null default current_timestamp,
+    primary key(id),
+    key idx_to   (to_id),
+    key idx_from (from_id),
+    foreign key(from_id) references profiles (id),
+    foreign key(to_id)   references profiles (id)
+
+) Engine=InnoDB default charset=utf8;
+
 create table if not exists settings (
     id bigint unsigned not null auto_increment,
     profile_id int unsigned not null,
