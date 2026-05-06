@@ -95,47 +95,64 @@ def _go_api_base() -> str:
     return f'http://{host}:{port}'
 
 
-def _go_post(path: str, payload: dict[str, Any]) -> tuple[Any, int]:
-    """POST JSON to the Go admin API. Returns (parsed_body, status_code)."""
-    body = json.dumps(payload).encode()
-    req = urllib.request.Request(
-        f'{_go_api_base()}{path}',
-        data=body,
-        headers={'Content-Type': 'application/json'},
-        method='POST',
-    )
+def _go_auth() -> tuple[str, str]:
+    cfg = current_app.config['FS_CONFIG']
+    return cfg.get('AdminUser', ''), cfg.get('AdminPassword', '')
+
+
+def _go_request(method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[Any, int]:
+    """Send an authenticated request to the Go admin API."""
+    import base64
+    url = f'{_go_api_base()}{path}'
+    data = json.dumps(payload).encode() if payload is not None else None
+    headers: dict[str, str] = {}
+    if data is not None:
+        headers['Content-Type'] = 'application/json'
+    user, pw = _go_auth()
+    if user:
+        token = base64.b64encode(f'{user}:{pw}'.encode()).decode()
+        headers['Authorization'] = f'Basic {token}'
+    req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=3) as resp:
             return json.loads(resp.read()), resp.status
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-        logger.error("Go API POST %s returned %d: %s", path, e.code, body)
+        logger.error("Go API %s %s returned %d: %s", method, path, e.code, body)
         return {'error': body}, e.code
     except Exception as e:
-        logger.error("Go API POST %s failed: %s", path, e)
+        logger.error("Go API %s %s failed: %s", method, path, e)
         return {'error': str(e)}, 503
 
 
+def _go_post(path: str, payload: dict[str, Any]) -> tuple[Any, int]:
+    return _go_request('POST', path, payload)
+
+
+def _reload_go_config() -> None:
+    body, status = _go_post("/admin/reload-config", {})
+    if status == 200:
+        logger.info("Go config reloaded: %s change(s)", body.get("count", "?"))
+    else:
+        logger.error("Go config reload failed (status %d): %s", status, body)
+
+
 def _get_online_users() -> list[dict[str, Any]]:
-    try:
-        with urllib.request.urlopen(
-                f'{_go_api_base()}/stats/users', timeout=1) as resp:
-            data: list[dict[str, Any]] = json.loads(resp.read())
-            return data if isinstance(data, list) else []
-    except Exception as e:
-        logger.warning("Go API /stats/users unavailable: %s", e)
-        return []
+    data, status = _go_request('GET', '/stats/users')
+    if status == 200 and isinstance(data, list):
+        return data
+    if status != 503:
+        logger.warning("Go API /stats/users returned %d", status)
+    return []
 
 
 def _get_lobby_stats() -> dict[str, Any]:
-    try:
-        with urllib.request.urlopen(
-                f'{_go_api_base()}/lobby-stats', timeout=1) as resp:
-            data: dict[str, Any] = json.loads(resp.read())
-            return {lb['name']: lb for lb in data.get('lobbies', [])}
-    except Exception as e:
-        logger.warning("Go API /lobby-stats unavailable: %s", e)
-        return {}
+    data, status = _go_request('GET', '/lobby-stats')
+    if status == 200:
+        return {lb['name']: lb for lb in data.get('lobbies', [])}
+    if status != 503:
+        logger.warning("Go API /lobby-stats returned %d", status)
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +187,8 @@ def home() -> str:
             try:
                 cfg.save()
                 lobby_saved = True
+                logger.info("Lobby config saved, triggering Go reload")
+                _reload_go_config()
             except Exception as e:
                 logger.error("Failed to save lobby config: %s", e)
             # return to view mode after saving
@@ -298,16 +317,13 @@ def chat() -> str:
                 error = "Go server unavailable or lobby not found."
 
     # Fetch chat history
-    url = f'{_go_api_base()}/admin/chat'
-    if lobby_filter:
-        url += f'?lobby={urllib.parse.quote(lobby_filter)}'
+    path = '/admin/chat' + (f'?lobby={urllib.parse.quote(lobby_filter)}' if lobby_filter else '')
     lobbies_chat: list[dict[str, Any]] = []
-    try:
-        with urllib.request.urlopen(url, timeout=2) as resp:
-            data = json.loads(resp.read())
-            lobbies_chat = data.get('lobbies', [])
-    except Exception as e:
-        logger.warning("Go API /admin/chat unavailable: %s", e)
+    data, status = _go_request('GET', path)
+    if status == 200:
+        lobbies_chat = data.get('lobbies', [])
+    elif status != 503:
+        logger.warning("Go API /admin/chat returned %d", status)
 
     return render_template(
         "admin/chat.html",
@@ -323,6 +339,19 @@ def chat() -> str:
 # ---------------------------------------------------------------------------
 
 
+@admin_bp.route("/kick", methods=["POST"])
+def kick():
+    profile: str = request.form.get("profile", "").strip()
+    if not profile:
+        return jsonify({"error": "profile required"}), 400
+    body, status = _go_post("/admin/kick", {"profile": profile})
+    if status == 200:
+        logger.info("Kicked player: %s", profile)
+        return jsonify({"kicked": profile}), 200
+    logger.warning("Kick failed for %s (status %d): %s", profile, status, body)
+    return jsonify(body), status
+
+
 @admin_bp.route("/api/lobby-stats")
 def api_lobby_stats():
     return jsonify({
@@ -334,15 +363,12 @@ def api_lobby_stats():
 @admin_bp.route("/api/chat")
 def api_chat():
     lobby_filter = request.args.get("lobby", "")
-    url = f'{_go_api_base()}/admin/chat'
-    if lobby_filter:
-        url += f'?lobby={urllib.parse.quote(lobby_filter)}'
-    try:
-        with urllib.request.urlopen(url, timeout=2) as resp:
-            return jsonify(json.loads(resp.read()))
-    except Exception as e:
-        logger.warning("Go API /admin/chat (api) unavailable: %s", e)
-        return jsonify({"lobbies": []}), 503
+    path = '/admin/chat' + (f'?lobby={urllib.parse.quote(lobby_filter)}' if lobby_filter else '')
+    data, status = _go_request('GET', path)
+    if status == 200:
+        return jsonify(data)
+    logger.warning("Go API /admin/chat (api) returned %d", status)
+    return jsonify({"lobbies": []}), 503
 
 
 # ---------------------------------------------------------------------------
@@ -675,6 +701,8 @@ def settings() -> str:
         try:
             cfg.save()
             saved = True
+            logger.info("Settings saved, triggering Go reload")
+            _reload_go_config()
         except Exception as e:
             logger.error("Failed to save settings: %s", e)
 
