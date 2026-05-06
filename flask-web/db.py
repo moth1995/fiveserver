@@ -199,14 +199,24 @@ def get_profile_by_name(conn: pymysql.connections.Connection,
 
 def browse_profiles(conn: pymysql.connections.Connection,
                     offset: int = 0,
-                    limit: int = 50) -> tuple[int, list[dict[str, Any]]]:
+                    limit: int = 50,
+                    query: str = '') -> tuple[int, list[dict[str, Any]]]:
     with conn.cursor() as cur:
-        cur.execute('SELECT COUNT(id) AS n FROM profiles WHERE deleted = 0')
-        total: int = cur.fetchone()['n']  # type: ignore[index]
-        cur.execute(
-            f'SELECT {_PROFILE_COLS} FROM profiles WHERE deleted = 0 '
-            'ORDER BY name LIMIT %s OFFSET %s',
-            (limit, offset))
+        if query:
+            pattern = f'%{query}%'
+            cur.execute('SELECT COUNT(id) AS n FROM profiles WHERE deleted = 0 AND name LIKE %s', (pattern,))
+            total: int = cur.fetchone()['n']  # type: ignore[index]
+            cur.execute(
+                f'SELECT {_PROFILE_COLS} FROM profiles WHERE deleted = 0 AND name LIKE %s '
+                'ORDER BY name LIMIT %s OFFSET %s',
+                (pattern, limit, offset))
+        else:
+            cur.execute('SELECT COUNT(id) AS n FROM profiles WHERE deleted = 0')
+            total = cur.fetchone()['n']  # type: ignore[index]
+            cur.execute(
+                f'SELECT {_PROFILE_COLS} FROM profiles WHERE deleted = 0 '
+                'ORDER BY name LIMIT %s OFFSET %s',
+                (limit, offset))
         rows: list[dict[str, Any]] = cur.fetchall()  # type: ignore[assignment]
     return total, rows
 
