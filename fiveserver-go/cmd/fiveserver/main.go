@@ -85,6 +85,11 @@ func main() {
 
 	// ---- 4. Shared Hub ---------------------------------------------------------
 	hub := protocol.NewHub(cfg)
+	hub.OnUserConfirmedOffline = func(userID int, seconds int64) {
+		if err := db.AddUserOnlineSeconds(context.Background(), sc, userID, seconds); err != nil {
+			logger.Errorf("[hub] AddUserOnlineSeconds user=%d: %v", userID, err)
+		}
+	}
 	protocol.StartDayChangeTimer(hub)
 	startRanksTimer(sc, cfg)
 

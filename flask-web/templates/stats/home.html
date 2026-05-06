@@ -1,28 +1,76 @@
 {% extends "admin/layout.html" %}
-{% block title %}Metrics — {{ month_label }}{% endblock %}
+{% block title %}Metrics{% endblock %}
 {% block body %}
 
-{# ── Filter bar ─────────────────────────────────────────────────────────── #}
-<form class="stats-filters" method="GET" action="/stats">
+{# ── Unified filter bar ──────────────────────────────────────────────────── #}
+<form class="stats-filters" method="GET" action="/stats" id="stats-filter-form">
   <div class="filter-group">
-    <label>Month</label>
-    <select name="month" onchange="this.form.submit()">
-      {% for opt in month_options %}
-      <option value="{{ opt.value }}" {% if opt.value == selected_month %}selected{% endif %}>
-        {{ opt.label }}
-      </option>
+    <label>Range</label>
+    <select name="preset" id="preset-select" onchange="onPresetChange(this)">
+      {% for p in presets %}
+      <option value="{{ p.value }}" {% if p.value == preset %}selected{% endif %}>{{ p.label }}</option>
       {% endfor %}
     </select>
   </div>
-
-  <div class="filter-group">
-    <label>Active Users Range</label>
-    <input type="date" name="from" value="{{ date_from }}">
+  <div class="filter-group" id="custom-range" style="{{ '' if preset == 'custom' else 'opacity:.45;pointer-events:none;' }}">
+    <input type="date" name="from" id="from-input" value="{{ date_from }}" {% if preset != 'custom' %}readonly{% endif %}>
     <span style="color:#64748b;">to</span>
-    <input type="date" name="to"   value="{{ date_to }}">
-    <button class="btn btn-secondary btn-sm" type="submit">Apply</button>
+    <input type="date" name="to"   id="to-input"   value="{{ date_to }}"   {% if preset != 'custom' %}readonly{% endif %}>
+    <button class="btn btn-secondary btn-sm" type="submit" id="apply-btn"
+            style="{{ '' if preset == 'custom' else 'display:none;' }}">Apply</button>
+  </div>
+  <div class="filter-group" style="color:#64748b;font-size:.85rem;align-self:center;">
+    {{ date_from }} → {{ date_to }}
   </div>
 </form>
+
+<script>
+var PRESET_RANGES = (function() {
+  var today = new Date();
+  function iso(d) { return d.toISOString().slice(0,10); }
+  function addDays(d, n) { var r = new Date(d); r.setDate(r.getDate() + n); return r; }
+  function firstOfMonth(d) { return new Date(d.getFullYear(), d.getMonth(), 1); }
+  function lastOfMonth(d)  { return new Date(d.getFullYear(), d.getMonth()+1, 0); }
+  var prevMonthEnd   = new Date(firstOfMonth(today) - 1);
+  var prevMonthStart = firstOfMonth(prevMonthEnd);
+  return {
+    today:       [iso(today), iso(today)],
+    yesterday:   [iso(addDays(today,-1)), iso(addDays(today,-1))],
+    last7:       [iso(addDays(today,-6)), iso(today)],
+    last30:      [iso(addDays(today,-29)), iso(today)],
+    this_month:  [iso(firstOfMonth(today)), iso(today)],
+    last_month:  [iso(prevMonthStart), iso(prevMonthEnd)],
+    last3months: [iso(addDays(today,-89)), iso(today)],
+    last_year:   [iso(addDays(today,-364)), iso(today)],
+  };
+})();
+
+function onPresetChange(sel) {
+  var val = sel.value;
+  var customRow = document.getElementById('custom-range');
+  var fromIn = document.getElementById('from-input');
+  var toIn   = document.getElementById('to-input');
+  var applyBtn = document.getElementById('apply-btn');
+  if (val === 'custom') {
+    customRow.style.opacity = '';
+    customRow.style.pointerEvents = '';
+    fromIn.removeAttribute('readonly');
+    toIn.removeAttribute('readonly');
+    applyBtn.style.display = '';
+  } else {
+    customRow.style.opacity = '.45';
+    customRow.style.pointerEvents = 'none';
+    fromIn.setAttribute('readonly', '');
+    toIn.setAttribute('readonly', '');
+    applyBtn.style.display = 'none';
+    if (PRESET_RANGES[val]) {
+      fromIn.value = PRESET_RANGES[val][0];
+      toIn.value   = PRESET_RANGES[val][1];
+    }
+    document.getElementById('stats-filter-form').submit();
+  }
+}
+</script>
 
 {# ── Summary cards ───────────────────────────────────────────────────────── #}
 <div class="cards" style="margin-top:20px;">
@@ -46,21 +94,21 @@
 
 {# ── Matches per day ─────────────────────────────────────────────────────── #}
 <div class="chart-section">
-  <h2>Matches Per Day — {{ month_label }}</h2>
+  <h2>Matches Per Day — {{ date_from }} to {{ date_to }}</h2>
   <div class="bar-chart-wrap">
     <div class="bar-chart">
       {% for d in matches_per_day %}
       <div class="bar-col">
         <div class="bar-tooltip">{{ d.count }}</div>
         <div class="bar" style="height:{{ ((d.count / max_daily) * 100) | round(1) }}%"></div>
-        <div class="bar-label">{{ d.day }}</div>
+        <div class="bar-label">{{ d.label }}</div>
       </div>
       {% endfor %}
     </div>
   </div>
 </div>
 
-{# ── Bottom two-column section ───────────────────────────────────────────── #}
+{# ── Bottom three-column section ─────────────────────────────────────────── #}
 <div class="stats-two-col">
 
   {# Top Teams #}
@@ -100,5 +148,24 @@
   </div>
 
 </div>
+
+{# ── Most Time Online (all-time) ─────────────────────────────────────────── #}
+{% if top_online %}
+<div class="chart-section" style="margin-top:24px;">
+  <h2>Most Time Online <span style="font-size:.8rem;font-weight:400;color:#64748b;">(all-time)</span></h2>
+  {% set online_max = top_online[0].hours if top_online else 1 %}
+  <div class="hbar-chart">
+    {% for u in top_online %}
+    <div class="hbar-row">
+      <div class="hbar-label">{{ u.username }}</div>
+      <div class="hbar-track">
+        <div class="hbar-fill hbar-fill--online" style="width:{{ ((u.hours / online_max) * 100) | round(1) }}%"></div>
+      </div>
+      <div class="hbar-value">{{ u.hours }}h</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 
 {% endblock %}

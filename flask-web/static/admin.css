@@ -445,7 +445,8 @@ a:hover { text-decoration: underline; }
   transition: width .3s ease;
 }
 
-.hbar-fill--alt { background: #8b5cf6; }
+.hbar-fill--alt    { background: #8b5cf6; }
+.hbar-fill--online { background: #10b981; }
 
 .hbar-value {
   text-align: right;

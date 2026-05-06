@@ -6,8 +6,9 @@ create table if not exists users (
     hash char(32) not null unique,
     reset_nonce varchar(32) default null,
     updated_on timestamp not null default current_timestamp on update current_timestamp,
+    total_online_seconds bigint unsigned not null default 0,
     primary key(id)
-    
+
 ) Engine=InnoDB default charset=utf8;
 
 create table if not exists profiles (

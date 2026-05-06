@@ -19,6 +19,7 @@ services:
     volumes:
       - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
       - ./sql/metrics.sql:/docker-entrypoint-initdb.d/02_metrics.sql:ro
+      - ./sql/migrations/001_add_total_online_seconds.sql:/docker-entrypoint-initdb.d/03_migration_v1.sql:ro
       - db_data:/var/lib/mysql
     healthcheck:
       test: ["CMD-SHELL", "mariadb-admin ping -hlocalhost -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]

@@ -123,6 +123,11 @@ type Hub struct {
 	lobbies       []*model.Lobby         // live lobby instances initialised from cfg.Lobbies
 	onlineSince   map[string]time.Time   // hash → original connect time (persists across port transitions)
 	offlineTimers map[string]*time.Timer // hash → pending offline-cleanup timer
+
+	// OnUserConfirmedOffline is called once the grace period expires and the
+	// user is confirmed truly offline (not a port transition). userID is the
+	// users.id PK; seconds is the total duration of this session.
+	OnUserConfirmedOffline func(userID int, seconds int64)
 }
 
 func NewHub(cfg *config.Config) *Hub {
@@ -278,6 +283,10 @@ func (h *Hub) UserOffline(s *Session) {
 			delete(h.byProfile, name)
 		}
 	}
+	// Capture session duration before releasing the lock / launching the goroutine.
+	since := h.onlineSince[hash]
+	userID := s.User.User.ID
+
 	// Cancel any previous offline timer before starting a new one.
 	if t, ok := h.offlineTimers[hash]; ok {
 		t.Stop()
@@ -287,8 +296,12 @@ func (h *Hub) UserOffline(s *Session) {
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		if _, online := h.byHash[hash]; !online {
+			sessionSeconds := int64(time.Since(since).Seconds())
 			delete(h.onlineSince, hash)
 			logger.Infof("[hub] user hash=%s confirmed offline (grace period elapsed)", hash)
+			if h.OnUserConfirmedOffline != nil {
+				go h.OnUserConfirmedOffline(userID, sessionSeconds)
+			}
 		}
 		delete(h.offlineTimers, hash)
 	})
