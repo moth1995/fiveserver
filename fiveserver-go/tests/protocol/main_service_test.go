@@ -22,6 +22,26 @@ func mainHub(lobbies ...config.Lobby) *protocol.Hub {
 	})
 }
 
+func mainHubWithDC(playerScore, opponentScore int) *protocol.Hub {
+	return protocol.NewHub(&config.Config{
+		MaxUsers:   100,
+		ServerName: "Test",
+		Lobbies:    []config.Lobby{{Name: "EU", TypeCode: 0x5f}},
+		Disconnects: config.DisconnectsConfig{
+			CountAsLoss: config.CountAsLossConfig{
+				Enabled: true,
+				Score: config.DisconnectScore{
+					Player:   playerScore,
+					Opponent: opponentScore,
+				},
+			},
+		},
+		NetworkServer: config.NetworkServerConfig{
+			LoginService: map[string]int{"pes5": 20102},
+		},
+	})
+}
+
 func sessionInRoom(hub *protocol.Hub, profID int, profName string, lobbyIdx int) (*protocol.Session, *model.Room, *captureConn) {
 	s, cap := newCaptureSession(hub)
 	s.User = &model.ConnectedUser{
@@ -425,5 +445,122 @@ func TestMainDisconnect_RemovesFromHubAndLobby(t *testing.T) {
 
 	if hub.OnlineCount() != 0 {
 		t.Errorf("expected 0 online after disconnect, got %d", hub.OnlineCount())
+	}
+}
+
+// ---- disconnect penalty (CountAsLoss) ----------------------------------------
+
+// setupMatchInProgress creates two sessions in the same room with an active
+// match (both teams selected), returning home session, away session, and the room.
+func setupMatchInProgress(hub *protocol.Hub, lobbyIdx int) (*protocol.Session, *protocol.Session, *model.Room) {
+	sHome, room, _ := sessionInRoom(hub, 1, "Home", lobbyIdx)
+	sAway, _, _ := sessionInRoom(hub, 2, "Away", lobbyIdx)
+
+	// Move away session into the same room
+	room.Enter(sAway.User)
+	sAway.User.State.InRoom = true
+	sAway.User.State.Room = room
+
+	// Simulate both teams selected so the match counts
+	room.Match = &model.Match{
+		HomeProfileID: 1,
+		AwayProfileID: 2,
+		HomeTeamID:    305,
+		AwayTeamID:    101,
+		ScoreHome:     2,
+		ScoreAway:     1,
+	}
+	return sHome, sAway, room
+}
+
+// TestDisconnectPenalty_HomeDisconnects checks that when the home player
+// disconnects with CountAsLoss enabled, the match score is overwritten so
+// the home player loses (player=0, opponent=3).
+func TestDisconnectPenalty_HomeDisconnects(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if room.Match == nil {
+		t.Fatal("match should not be nil when CountAsLoss is enabled")
+	}
+	if room.Match.ScoreHome != 0 || room.Match.ScoreAway != 3 {
+		t.Errorf("score after home disconnect = %d:%d, want 0:3",
+			room.Match.ScoreHome, room.Match.ScoreAway)
+	}
+}
+
+// TestDisconnectPenalty_AwayDisconnects checks the symmetric case: away player
+// disconnects, home score becomes opponent (3) and away score becomes player (0).
+func TestDisconnectPenalty_AwayDisconnects(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	_, sAway, room := setupMatchInProgress(hub, 0)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = d.Dispatch(sAway, pkt)
+
+	if room.Match == nil {
+		t.Fatal("match should not be nil when CountAsLoss is enabled")
+	}
+	if room.Match.ScoreHome != 3 || room.Match.ScoreAway != 0 {
+		t.Errorf("score after away disconnect = %d:%d, want 3:0",
+			room.Match.ScoreHome, room.Match.ScoreAway)
+	}
+}
+
+// TestDisconnectPenalty_Disabled checks that when CountAsLoss is disabled,
+// the match is discarded (set to nil) on disconnect — matching Python behaviour.
+func TestDisconnectPenalty_Disabled(t *testing.T) {
+	hub := mainHub(config.Lobby{Name: "EU", TypeCode: 0x5f})
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if room.Match != nil {
+		t.Errorf("match should be discarded when CountAsLoss is disabled, got %+v", room.Match)
+	}
+}
+
+// TestDisconnectPenalty_NoTeamsSelected checks that if teams were never chosen
+// (HomeTeamID == 0), the match is discarded regardless of CountAsLoss setting.
+func TestDisconnectPenalty_NoTeamsSelected(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+	room.Match.HomeTeamID = 0 // simulate teams not yet selected
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if room.Match != nil {
+		t.Errorf("match should be nil when teams not selected, got %+v", room.Match)
+	}
+}
+
+// TestDisconnectPenalty_DisconnectCounterIncremented verifies the player's
+// disconnect counter is incremented on in-match disconnect.
+func TestDisconnectPenalty_DisconnectCounterIncremented(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	sHome, _, _ := setupMatchInProgress(hub, 0)
+	before := sHome.User.Profile.Disconnects
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if sHome.User.Profile.Disconnects != before+1 {
+		t.Errorf("disconnect counter = %d, want %d",
+			sHome.User.Profile.Disconnects, before+1)
 	}
 }
