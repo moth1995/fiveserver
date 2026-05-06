@@ -121,7 +121,6 @@ jobs:
         run: |
           pytest --tb=short \
             --cov=. \
-            --cov-omit=tests/* \
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml
 
