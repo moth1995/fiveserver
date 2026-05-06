@@ -27,6 +27,9 @@ GamePorts:
     pes5: 16001
     we9le: 19501
     we9: 18001
+    pes5ps2: 15001
+    we9ps2: 17001
+    we9leps2: 19001
 
 NetworkServer:
     mainService: 20100
@@ -35,6 +38,9 @@ NetworkServer:
         pes5: 20102
         we9: 20103
         we9le: 20104
+        pes5ps2: 20102
+        we9ps2: 20103
+        we9leps2: 20104
 
 WebInterface:
     port: 80
