@@ -56,7 +56,7 @@ jobs:
         run: ruff check .
 
       - name: ruff format check
-        run: ruff format --check .
+        run: ruff format --diff . && ruff format --check .
 
   # ── 2. Test ──────────────────────────────────────────────────────────────────
   test-go:
