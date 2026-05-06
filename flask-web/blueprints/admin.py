@@ -295,19 +295,22 @@ def profile_detail(profile_id: str) -> str:
 
 @admin_bp.route("/chat", methods=["GET", "POST"])
 def chat() -> str:
+    cfg = current_app.config["FS_CONFIG"]
     lobby_filter: str = request.args.get("lobby", "")
     error: str | None = None
     success: str | None = None
+    from_name: str = "admin"
 
     if request.method == "POST":
         message: str = request.form.get("message", "").strip()
         lobby: str = request.form.get("lobby", "").strip()
+        from_name = request.form.get("from", "admin").strip() or "admin"
         if not message:
             error = "Message cannot be empty."
         elif len(message.encode()) > 126:
             error = "Message too long (max 126 bytes)."
         else:
-            payload: dict[str, Any] = {"message": message, "from": "admin"}
+            payload: dict[str, Any] = {"message": message, "from": from_name}
             if lobby:
                 payload["lobby"] = lobby
             _, status = _go_post("/admin/chat", payload)
@@ -315,6 +318,14 @@ def chat() -> str:
                 success = f"Message sent to {'lobby ' + lobby if lobby else 'all lobbies'}."
             else:
                 error = "Go server unavailable or lobby not found."
+
+    # Lobby names for comboboxes
+    lobby_names: list[str] = [
+        (lb if isinstance(lb, str) else lb.get('name', ''))
+        for lb in cfg.get("Lobbies", [])
+        if isinstance(lb, str) or isinstance(lb, dict)
+    ]
+    lobby_names = [n for n in lobby_names if n]
 
     # Fetch chat history
     path = '/admin/chat' + (f'?lobby={urllib.parse.quote(lobby_filter)}' if lobby_filter else '')
@@ -328,7 +339,9 @@ def chat() -> str:
     return render_template(
         "admin/chat.html",
         lobbies_chat=lobbies_chat,
+        lobby_names=lobby_names,
         lobby_filter=lobby_filter,
+        from_name=from_name,
         error=error,
         success=success,
     )
@@ -354,9 +367,12 @@ def kick():
 
 @admin_bp.route("/api/lobby-stats")
 def api_lobby_stats():
+    # lobby_stats_list preserves Go's lobby order so JS can match by index
+    raw, status = _go_request('GET', '/lobby-stats')
+    lobby_stats_list: list = raw.get('lobbies', []) if status == 200 else []
     return jsonify({
         "users": _get_online_users(),
-        "lobby_stats": _get_lobby_stats(),
+        "lobby_stats": lobby_stats_list,
     })
 
 
