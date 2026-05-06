@@ -127,8 +127,8 @@ func TestReload_IsBannedAfterReload(t *testing.T) {
 
 	// Write a banned list
 	bannedFile, _ := os.CreateTemp(t.TempDir(), "banned*.yaml")
-	bannedFile.WriteString("Banned:\n  - 10.0.0.1\n")
-	bannedFile.Close()
+	_, _ = bannedFile.WriteString("Banned:\n  - 10.0.0.1\n")
+	_ = bannedFile.Close()
 
 	// Update config to point to banned list and reload
 	f2 := writeTemp(t, baseYAML+"BannedList: "+bannedFile.Name()+"\n")

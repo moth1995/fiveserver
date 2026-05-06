@@ -77,7 +77,7 @@ jobs:
       - name: go test with coverage
         run: |
           COVER_PKGS=$(go list ./internal/... | tr '\n' ',')
-          go test ./tests/... \
+          go test -race ./tests/... \
             -covermode=atomic \
             -coverpkg="${COVER_PKGS%,}" \
             -coverprofile=coverage.out

@@ -18,7 +18,7 @@ func writeTemp(t *testing.T, content string) string {
 	if _, err := f.WriteString(content); err != nil {
 		t.Fatalf("write temp: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 	return f.Name()
 }
 

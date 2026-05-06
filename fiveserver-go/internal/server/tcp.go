@@ -34,7 +34,7 @@ func (c *Conn) Send(pkt protocol.Packet) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	wire := crypto.XorData(protocol.Marshal(pkt), 0)
-	_, err := c.Conn.Write(wire)
+	_, err := c.Write(wire)
 	if err == nil {
 		atomic.AddUint32(&c.packetCount, 1)
 	}
@@ -81,7 +81,7 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debugFn 
 	if stopCh != nil {
 		go func() {
 			<-stopCh
-			ln.Close()
+			_ = ln.Close()
 		}()
 	}
 
@@ -113,7 +113,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter f
 	if filter != nil {
 		if err := filter(conn.RemoteAddr); err != nil {
 			logger.Infof("[tcp] %s: connection rejected: %v", conn.RemoteAddr, err)
-			conn.Close()
+			_ = conn.Close()
 			return
 		}
 	}
@@ -123,7 +123,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter f
 		SendDataFn:  conn.SendData,
 		SendZerosFn: conn.SendZeros,
 		SendFn:      conn.Send,
-		CloseFn:     func() { conn.Close() },
+		CloseFn:     func() { _ = conn.Close() },
 		RemoteAddr:  conn.RemoteAddr,
 	}
 	s := &protocol.Session{
@@ -133,7 +133,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter f
 
 	defer func() {
 		logger.Infof("[tcp] connection closed: %s", conn.RemoteAddr)
-		conn.Close()
+		_ = conn.Close()
 		if s.OnClose != nil {
 			s.OnClose()
 		}
@@ -155,7 +155,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter f
 	tmp := make([]byte, 4096)
 
 	for {
-		n, err := conn.Conn.Read(tmp)
+		n, err := conn.Read(tmp)
 		if err != nil {
 			if !errors.Is(err, io.EOF) && !errors.Is(err, net.ErrClosed) {
 				logger.Warnf("[tcp] %s: read error: %v", conn.RemoteAddr, err)
@@ -164,11 +164,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter f
 		}
 		buf = append(buf, tmp[:n]...)
 
-		for {
-			if len(buf) < 8 {
-				break
-			}
-
+		for len(buf) >= 8 {
 			// XOR-decrypt the 8-byte header at offset 0
 			hdrBytes := crypto.XorData(buf[:8], 0)
 			hdr, err := protocol.UnmarshalHeader(hdrBytes)

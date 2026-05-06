@@ -28,7 +28,7 @@ func NewPool(dsns []string, cfg config.ConnectionPoolConfig) (*Pool, error) {
 	for _, dsn := range dsns {
 		db, err := sql.Open("mysql", dsn)
 		if err != nil {
-			p.Close()
+			_ = p.Close()
 			return nil, fmt.Errorf("db: open %q: %w", dsn, err)
 		}
 		db.SetMaxOpenConns(cfg.MaxConnections)
@@ -100,7 +100,7 @@ func NewStorageController(cfg config.DBConfig) (*StorageController, error) {
 
 	readPool, err := NewPool(buildDSNs(cfg.ReadServers), cfg.ConnectionPool)
 	if err != nil {
-		writePool.Close()
+		_ = writePool.Close()
 		return nil, fmt.Errorf("db: read pool: %w", err)
 	}
 	return &StorageController{Read: readPool, Write: writePool}, nil

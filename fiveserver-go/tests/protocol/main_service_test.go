@@ -22,23 +22,6 @@ func mainHub(lobbies ...config.Lobby) *protocol.Hub {
 	})
 }
 
-func mainHubWithDC(playerScore, opponentScore int) *protocol.Hub {
-	return protocol.NewHub(&config.Config{
-		MaxUsers:   100,
-		ServerName: "Test",
-		Lobbies:    []config.Lobby{{Name: "EU", TypeCode: 0x5f}},
-		Disconnects: config.DisconnectsConfig{
-			CountAsLoss: config.CountAsLossConfig{
-				Enabled: true,
-				Score:   config.DisconnectScore{Player: playerScore, Opponent: opponentScore},
-			},
-		},
-		NetworkServer: config.NetworkServerConfig{
-			LoginService: map[string]int{"pes5": 20102},
-		},
-	})
-}
-
 func sessionInRoom(hub *protocol.Hub, profID int, profName string, lobbyIdx int) (*protocol.Session, *model.Room, *captureConn) {
 	s, cap := newCaptureSession(hub)
 	s.User = &model.ConnectedUser{

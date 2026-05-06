@@ -297,7 +297,7 @@ func (c *Config) ResolveServerIP() {
 			resp, err := hc.Get(uri)
 			if err == nil {
 				body, rerr := io.ReadAll(resp.Body)
-				resp.Body.Close()
+				_ = resp.Body.Close()
 				if rerr == nil {
 					ip := strings.TrimSpace(string(body))
 					c.ipMu.Lock()
