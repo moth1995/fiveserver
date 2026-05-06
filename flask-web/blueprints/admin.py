@@ -354,20 +354,29 @@ def api_chat():
 def log() -> str:
     n_lines: int = int(request.args.get("lines", 30))
     n_lines = min(n_lines, 5000)
+
     cfg = current_app.config["FS_CONFIG"]
-    log_file: str = cfg.get("FiveserverLogFile", "")
+    log_keys = {"fiveserver": "FiveserverLogFile", "webserver": "WebserverLogFile"}
+
+    selected = request.args.get("log", session.get("log_preference", "fiveserver"))
+    if selected not in log_keys:
+        selected = "fiveserver"
+    session["log_preference"] = selected
+
+    log_file: str = cfg.get(log_keys[selected], "")
     lines: list[str] = []
     if log_file:
-        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        repo_root = current_app.config['REPO_ROOT']
         if not os.path.isabs(log_file):
             log_file = os.path.join(repo_root, log_file)
+        logger.debug("Log viewer reading: %s", log_file)
         try:
             with open(log_file, encoding="utf-8", errors="replace") as f:
                 all_lines = f.readlines()
             lines = [l.rstrip("\n") for l in all_lines[-n_lines:]]
         except OSError:
             lines = ["(log file not found or unreadable)"]
-    return render_template("admin/log.html", lines=lines, line_count=n_lines)
+    return render_template("admin/log.html", lines=lines, line_count=n_lines, selected_log=selected)
 
 
 # ---------------------------------------------------------------------------
@@ -712,7 +721,7 @@ def banned() -> str:
 
         import yaml as _yaml
 
-        repo_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+        repo_root = current_app.config['REPO_ROOT']
         banned_file: str = cfg.get("BannedList", "")
         if banned_file:
             if not _os.path.isabs(banned_file):
@@ -731,7 +740,7 @@ def _load_banned_file() -> tuple[list[str], str]:
     import yaml as _yaml
 
     cfg = current_app.config["FS_CONFIG"]
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo_root = current_app.config['REPO_ROOT']
     banned_file: str = cfg.get("BannedList", "")
     if banned_file and not os.path.isabs(banned_file):
         banned_file = os.path.join(repo_root, banned_file)

@@ -31,6 +31,7 @@ def create_app(
         admin_config_path or os.path.join(repo_root, 'etc', 'conf', 'admin.yaml'),
     )
     app.config['FS_CONFIG'] = cfg
+    app.config['REPO_ROOT'] = repo_root
     # Credentials come from admin.yaml (AdminUser / AdminPassword).
     # No env var override — edit admin.yaml to change credentials.
     app.config['ADMIN_USER'] = cfg.get('AdminUser', 'fives')
