@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"github.com/fiveserver/fiveserver-go/internal/logger"
@@ -33,9 +34,14 @@ func registerMenuHandlers(d *Dispatcher, hub *Hub, sc *db.StorageController) {
 	d.Register(0x4210, handleGetUserList4210(hub))
 	d.Register(0x4300, handleGetRoomList4300(hub))
 	d.Register(0x3080, handleDo3080())
+	d.Register(0x4510, handleRemoveFriend4510(sc))
+	d.Register(0x4520, handleBlockProfile4520(sc))
+	d.Register(0x4522, handleUnblockProfile4522(sc))
 	d.Register(0x4580, handleGetFriends4580())
 	d.Register(0x4600, handleSearchPlayers4600())
-	d.Register(0x4780, handleGetInboxMessages4780())
+	d.Register(0x4700, handleSendMessage4700(sc))
+	d.Register(0x4780, handleGetMessages4780(sc))
+	d.Register(0x4790, handleDo4790())
 	d.Register(0x4a00, handleQuickMatchSearch4a00(hub))
 	d.Register(0x0003, handleMenuDisconnect(hub)) // overrides login's disconnect
 }
@@ -292,6 +298,78 @@ func handleDo3080() HandlerFunc {
 	}
 }
 
+// ---- 0x4510 removeFriend ----------------------------------------------------
+
+func handleRemoveFriend4510(sc *db.StorageController) HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if s.User == nil || s.User.Profile == nil || len(pkt.Data) < 4 {
+			return nil
+		}
+		friendID := int(int32(binary.BigEndian.Uint32(pkt.Data[0:4])))
+		ctx := context.Background()
+		_ = db.RemoveFriend(ctx, sc, s.User.Profile.ID, friendID)
+		return s.Conn.SendZeros(0x4512, 4)
+	}
+}
+
+// ---- 0x4520 blockProfile ----------------------------------------------------
+
+func handleBlockProfile4520(sc *db.StorageController) HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if s.User == nil || s.User.Profile == nil || len(pkt.Data) < 4 {
+			return nil
+		}
+		targetID := int(int32(binary.BigEndian.Uint32(pkt.Data[0:4])))
+		ctx := context.Background()
+		_ = db.BlockProfile(ctx, sc, s.User.Profile.ID, targetID)
+		return s.Conn.SendZeros(0x4521, 4)
+	}
+}
+
+// ---- 0x4522 unblockProfile --------------------------------------------------
+
+func handleUnblockProfile4522(sc *db.StorageController) HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if s.User == nil || s.User.Profile == nil || len(pkt.Data) < 4 {
+			return nil
+		}
+		targetID := int(int32(binary.BigEndian.Uint32(pkt.Data[0:4])))
+		ctx := context.Background()
+		_ = db.UnblockProfile(ctx, sc, s.User.Profile.ID, targetID)
+		return s.Conn.SendZeros(0x4523, 4)
+	}
+}
+
+// ---- 0x4700 sendMessage -----------------------------------------------------
+
+func handleSendMessage4700(sc *db.StorageController) HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if s.User == nil || s.User.Profile == nil || len(pkt.Data) < 4 {
+			return nil
+		}
+		toID := int(int32(binary.BigEndian.Uint32(pkt.Data[0:4])))
+		body := ""
+		if len(pkt.Data) > 4 {
+			raw := pkt.Data[4:]
+			if i := bytes.IndexByte(raw, 0); i >= 0 {
+				raw = raw[:i]
+			}
+			body = string(raw)
+		}
+		ctx := context.Background()
+		_ = db.SendMessage(ctx, sc, s.User.Profile.ID, toID, body)
+		return s.Conn.SendZeros(0x4702, 4)
+	}
+}
+
+// ---- 0x4790 ACK -------------------------------------------------------------
+
+func handleDo4790() HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		return s.Conn.SendZeros(0x4791, 4)
+	}
+}
+
 // ---- 0x4580 getFriends -------------------------------------------------------
 
 func handleGetFriends4580() HandlerFunc {
@@ -314,15 +392,47 @@ func handleSearchPlayers4600() HandlerFunc {
 	}
 }
 
-// ---- 0x4780 getInboxMessages ------------------------------------------------
+// ---- 0x4780 getMessages -----------------------------------------------------
+// No messages: 0x4781 + 0x4783. Has messages: 0x4782 → 0x4784 per-msg → 0x4786.
 
-func handleGetInboxMessages4780() HandlerFunc {
+func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
-		if err := s.Conn.SendZeros(0x4781, 4); err != nil {
+		if s.User == nil || s.User.Profile == nil {
+			if err := s.Conn.SendZeros(0x4781, 4); err != nil {
+				return err
+			}
+			return s.Conn.SendZeros(0x4783, 4)
+		}
+		ctx := context.Background()
+		entries, err := db.GetMessagesForProfile(ctx, sc, s.User.Profile.ID)
+		if err != nil || len(entries) == 0 {
+			if err := s.Conn.SendZeros(0x4781, 4); err != nil {
+				return err
+			}
+			return s.Conn.SendZeros(0x4783, 4)
+		}
+		if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 			return err
 		}
-		return s.Conn.SendZeros(0x4783, 4)
+		for _, e := range entries {
+			if err := s.Conn.SendData(0x4784, buildMessagePacket(e)); err != nil {
+				return err
+			}
+		}
+		return s.Conn.SendZeros(0x4786, 0)
 	}
+}
+
+func buildMessagePacket(e *db.MessageEntry) []byte {
+	b := make([]byte, 0, 562)
+	b = append(b, pack32i(int32(e.ToID))...)
+	b = append(b, pack32i(int32(e.FromID))...)
+	b = append(b, model.PadWithZeros(e.SenderName, 16)...)
+	b = append(b, model.PadWithZeros(e.Body, 512)...)
+	b = append(b, model.PadWithZeros(e.SentAt.Format("2006/01/02 15:04:05"), 19)...)
+	b = append(b, byte(e.Bitfield>>24), byte(e.Bitfield>>16), byte(e.Bitfield>>8), byte(e.Bitfield))
+	b = append(b, 0, 0, 0) // 1 unknown byte + 2 unknown bytes
+	return b
 }
 
 // ---- 0x4a00 quickMatchSearch ------------------------------------------------
