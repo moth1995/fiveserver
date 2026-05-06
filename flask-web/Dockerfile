@@ -7,7 +7,7 @@ COPY flask-web/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY flask-web/ /app/
+COPY flask-web/ /app/flask-web/
 
 # Copy config and keys (mounted at runtime or baked in for testing)
 COPY etc/ /app/etc/
@@ -26,4 +26,4 @@ EXPOSE 80 443
 #   DB_USER         MySQL user           (default from fiveserver.yaml)
 #   DB_PASSWORD     MySQL password       (default from fiveserver.yaml)
 
-CMD ["python", "run.py"]
+CMD ["python", "flask-web/run.py"]
