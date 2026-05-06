@@ -65,12 +65,13 @@ func (c *Conn) SendZeros(id uint16, length int) error {
 //
 // Serve blocks until the listener is closed. Pass a channel that is closed
 // on shutdown via the stopCh parameter; pass nil to run forever.
-// When debug is true each packet's hex dump is logged (matches Python Debug flag).
+// debugFn()Fn is called on every packet — returning true enables hex-dump logging.
+// Using a func allows live toggling via config reload without restarting.
 //
 // filter (optional) is called with the raw "host:port" remote address immediately
 // after accept. If it returns a non-nil error the connection is rejected and
 // closed. Mirrors Python ConnectFilter / IsBanned + AtCapacity checks.
-func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bool, filter ...func(string) error) error {
+func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debugFn func() bool, filter ...func(string) error) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("server: listen %s: %w", addr, err)
@@ -101,13 +102,13 @@ func Serve(addr string, d *protocol.Dispatcher, stopCh <-chan struct{}, debug bo
 			packetCount: 1,
 		}
 		logger.Infof("[tcp] connection accepted from %s", conn.RemoteAddr)
-		go serveConn(conn, d, debug, connectFilter)
+		go serveConn(conn, d, debugFn, connectFilter)
 	}
 }
 
 // serveConn builds a Session+ConnSender for one accepted connection and runs
 // the packet read loop, dispatching every packet through d.
-func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(string) error) {
+func serveConn(conn *Conn, d *protocol.Dispatcher, debugFn func() bool, filter func(string) error) {
 	// Check connect filter (ban / capacity) before allocating any resources.
 	if filter != nil {
 		if err := filter(conn.RemoteAddr); err != nil {
@@ -138,9 +139,9 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 		}
 	}()
 
-	// In debug mode, wrap SendDataFn to also log the hex dump.
+	// In debugFn() mode, wrap SendDataFn to also log the hex dump.
 	// Captures s so the username is available after authentication.
-	if debug {
+	if debugFn() {
 		origSend := cs.SendDataFn
 		cs.SendDataFn = func(id uint16, data []byte) error {
 			username := sessionUsername(s)
@@ -200,7 +201,7 @@ func serveConn(conn *Conn, d *protocol.Dispatcher, debug bool, filter func(strin
 			}
 
 			logger.Debugf("[tcp] %s: recv pkt 0x%04x len=%d", conn.RemoteAddr, pkt.Header.ID, pkt.Header.Length)
-			if debug {
+			if debugFn() {
 				username := sessionUsername(s)
 				logger.Debugf("[RECV {%s}]: %s", username, formatPacket(pkt.Header.ID, pkt.Header.Length, pkt.Header.PacketCount, pkt.Data))
 			}
