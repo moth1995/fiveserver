@@ -244,6 +244,31 @@ Config is reloaded live without restart via `POST /admin/reload-config`.
 
 ---
 
+## CI / CD
+
+The GitHub Actions pipeline runs on every push and pull request:
+
+| Job | What it does |
+|---|---|
+| **Lint — Go** | `golangci-lint` on `fiveserver-go/` |
+| **Lint — Python** | `ruff check` + `ruff format --check` on `flask-web/` |
+| **Security scan** | `govulncheck` (Go modules), `pip-audit` (Python deps), Trivy filesystem scan (CRITICAL/HIGH); results uploaded to GitHub Security tab |
+| **Test — Go** | `go test -race` with coverage; report uploaded to Codecov (`go` flag) |
+| **Test — Python** | `pytest --cov` with coverage; report uploaded to Codecov (`python` flag) |
+| **Docker — build** | Builds both `fiveserver-go` and `flask-web` images (no push) |
+| **Release** | On `v*` tags: pushes images to GHCR as `latest` + versioned tag, creates a GitHub release with auto-generated notes |
+
+Docker images (published on release tags):
+
+```
+ghcr.io/moth1995/fiveserver:<tag>       # Go socket server
+ghcr.io/moth1995/fiveserver-web:<tag>   # Flask web layer
+```
+
+Dependabot is configured to keep Go modules and Python pip dependencies up to date automatically.
+
+---
+
 ## Known Limitations
 
 - The Go server only supports the PES5 DB schema. PES6 (`sixserver`) uses a different `matches` layout and is not yet supported by the Go DB layer.
