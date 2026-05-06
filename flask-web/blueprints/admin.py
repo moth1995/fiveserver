@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import random
+import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from db import (
     browse_profiles,
@@ -26,6 +31,7 @@ from flask import (
     Blueprint,
     abort,
     current_app,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -84,31 +90,51 @@ def logout():
 
 
 def _go_api_base() -> str:
-    host = os.environ.get('GO_API_HOST', '127.0.0.1')
-    port = os.environ.get('GO_API_PORT', '8199')
+    host = os.environ.get('GO_API_HOST', 'fiveserver')
+    port = current_app.config['FS_CONFIG'].get('AdminPort', 8181)
     return f'http://{host}:{port}'
 
 
+def _go_post(path: str, payload: dict[str, Any]) -> tuple[Any, int]:
+    """POST JSON to the Go admin API. Returns (parsed_body, status_code)."""
+    body = json.dumps(payload).encode()
+    req = urllib.request.Request(
+        f'{_go_api_base()}{path}',
+        data=body,
+        headers={'Content-Type': 'application/json'},
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            return json.loads(resp.read()), resp.status
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        logger.error("Go API POST %s returned %d: %s", path, e.code, body)
+        return {'error': body}, e.code
+    except Exception as e:
+        logger.error("Go API POST %s failed: %s", path, e)
+        return {'error': str(e)}, 503
+
+
 def _get_online_users() -> list[dict[str, Any]]:
-    """Call Go server's /stats/users. Returns [] on any error."""
     try:
         with urllib.request.urlopen(
                 f'{_go_api_base()}/stats/users', timeout=1) as resp:
             data: list[dict[str, Any]] = json.loads(resp.read())
             return data if isinstance(data, list) else []
-    except Exception:
+    except Exception as e:
+        logger.warning("Go API /stats/users unavailable: %s", e)
         return []
 
 
 def _get_lobby_stats() -> dict[str, Any]:
-    """Call Go server's /lobby-stats. Returns {} on any error."""
     try:
         with urllib.request.urlopen(
                 f'{_go_api_base()}/lobby-stats', timeout=1) as resp:
             data: dict[str, Any] = json.loads(resp.read())
-            # Index by lobby name for O(1) lookup in the template
             return {lb['name']: lb for lb in data.get('lobbies', [])}
-    except Exception:
+    except Exception as e:
+        logger.warning("Go API /lobby-stats unavailable: %s", e)
         return {}
 
 
@@ -144,8 +170,8 @@ def home() -> str:
             try:
                 cfg.save()
                 lobby_saved = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.error("Failed to save lobby config: %s", e)
             # return to view mode after saving
             edit_mode = False
     else:
@@ -241,6 +267,82 @@ def profile_detail(profile_id: str) -> str:
         abort(404)
     stats = get_profile_stats(conn, profile["id"])
     return render_template("admin/profile_detail.html", profile=profile, stats=stats)
+
+
+# ---------------------------------------------------------------------------
+# Chat
+# ---------------------------------------------------------------------------
+
+
+@admin_bp.route("/chat", methods=["GET", "POST"])
+def chat() -> str:
+    lobby_filter: str = request.args.get("lobby", "")
+    error: str | None = None
+    success: str | None = None
+
+    if request.method == "POST":
+        message: str = request.form.get("message", "").strip()
+        lobby: str = request.form.get("lobby", "").strip()
+        if not message:
+            error = "Message cannot be empty."
+        elif len(message.encode()) > 126:
+            error = "Message too long (max 126 bytes)."
+        else:
+            payload: dict[str, Any] = {"message": message, "from": "admin"}
+            if lobby:
+                payload["lobby"] = lobby
+            _, status = _go_post("/admin/chat", payload)
+            if status == 200:
+                success = f"Message sent to {'lobby ' + lobby if lobby else 'all lobbies'}."
+            else:
+                error = "Go server unavailable or lobby not found."
+
+    # Fetch chat history
+    url = f'{_go_api_base()}/admin/chat'
+    if lobby_filter:
+        url += f'?lobby={urllib.parse.quote(lobby_filter)}'
+    lobbies_chat: list[dict[str, Any]] = []
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            data = json.loads(resp.read())
+            lobbies_chat = data.get('lobbies', [])
+    except Exception as e:
+        logger.warning("Go API /admin/chat unavailable: %s", e)
+
+    return render_template(
+        "admin/chat.html",
+        lobbies_chat=lobbies_chat,
+        lobby_filter=lobby_filter,
+        error=error,
+        success=success,
+    )
+
+
+# ---------------------------------------------------------------------------
+# JSON polling endpoints (used by dashboard and chat page JS)
+# ---------------------------------------------------------------------------
+
+
+@admin_bp.route("/api/lobby-stats")
+def api_lobby_stats():
+    return jsonify({
+        "users": _get_online_users(),
+        "lobby_stats": _get_lobby_stats(),
+    })
+
+
+@admin_bp.route("/api/chat")
+def api_chat():
+    lobby_filter = request.args.get("lobby", "")
+    url = f'{_go_api_base()}/admin/chat'
+    if lobby_filter:
+        url += f'?lobby={urllib.parse.quote(lobby_filter)}'
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            return jsonify(json.loads(resp.read()))
+    except Exception as e:
+        logger.warning("Go API /admin/chat (api) unavailable: %s", e)
+        return jsonify({"lobbies": []}), 503
 
 
 # ---------------------------------------------------------------------------
@@ -564,8 +666,8 @@ def settings() -> str:
         try:
             cfg.save()
             saved = True
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to save settings: %s", e)
 
     roster: dict[str, Any] = cfg.get("Roster", {})
     disconnects: dict[str, Any] = cfg.get("Disconnects", {})
@@ -619,8 +721,8 @@ def banned() -> str:
                 with open(banned_file, encoding="utf-8") as f:
                     data = _yaml.safe_load(f) or {}
                 banned_list = data.get("Banned", [])
-    except Exception:
-        pass
+    except Exception as e:
+        logger.error("Failed to load banned list: %s", e)
     return render_template("admin/banned.html", banned_list=banned_list)
 
 
