@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import calendar
 import unittest
+from datetime import date, timedelta
 from unittest.mock import MagicMock, patch
 
 from helpers import create_test_app
@@ -23,9 +23,12 @@ _FAKE_TEAMS = [{"team_id": 1, "count": 20}, {"team_id": 5, "count": 15}]
 _FAKE_ROSTERS = [{"hash": "aabbcc", "count": 8}]
 
 
-def _fake_matches_per_day(conn, year, month):
-    days = calendar.monthrange(year, month)[1]
-    return [{"day": d, "count": 0} for d in range(1, days + 1)]
+def _fake_matches_per_day(conn, date_from, date_to):
+    span = (date_to - date_from).days + 1
+    return [
+        {"date": str(date_from + timedelta(days=i)), "label": str(i + 1), "count": 0}
+        for i in range(span)
+    ]
 
 
 def _patch_db(test_fn):
@@ -37,6 +40,7 @@ def _patch_db(test_fn):
         patch("blueprints.stats.stats_top_teams", return_value=_FAKE_TEAMS),
         patch("blueprints.stats.stats_top_rosters", return_value=_FAKE_ROSTERS),
         patch("blueprints.stats.stats_summary", return_value=_FAKE_SUMMARY),
+        patch("blueprints.stats.stats_top_online_users", return_value=[]),
     ]:
         test_fn = decorator(test_fn)
     return test_fn
@@ -90,14 +94,14 @@ class TestStatsHome(unittest.TestCase):
         self.assertIn(b"Top Roster Hashes", resp.data)
 
     @_patch_db
-    def test_month_filter(self, *_) -> None:
-        resp = self.client.get("/stats/?month=2026-01")
+    def test_preset_filter(self, *_) -> None:
+        resp = self.client.get("/stats/?preset=last7")
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"January 2026", resp.data)
+        self.assertIn(b"Last 7 days", resp.data)
 
     @_patch_db
     def test_date_range_filter(self, *_) -> None:
-        resp = self.client.get("/stats/?from=2026-04-01&to=2026-04-07")
+        resp = self.client.get("/stats/?preset=custom&from=2026-04-01&to=2026-04-07")
         self.assertEqual(resp.status_code, 200)
 
     @_patch_db
@@ -106,9 +110,10 @@ class TestStatsHome(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
     @_patch_db
-    def test_invalid_month_falls_back(self, *_) -> None:
-        resp = self.client.get("/stats/?month=bad")
+    def test_invalid_preset_falls_back(self, *_) -> None:
+        resp = self.client.get("/stats/?preset=bad")
         self.assertEqual(resp.status_code, 200)
+        self.assertIn(b"Today", resp.data)
 
 
 if __name__ == "__main__":
