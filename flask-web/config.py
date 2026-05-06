@@ -15,15 +15,15 @@ class AppConfig:
     """
 
     def __init__(self, data: dict[str, Any], yaml_file: str | None = None) -> None:
-        object.__setattr__(self, '_cfg', dict(data))
-        object.__setattr__(self, '_yaml_file', yaml_file)
-        object.__setattr__(self, '_dirty_keys', set())
+        object.__setattr__(self, "_cfg", dict(data))
+        object.__setattr__(self, "_yaml_file", yaml_file)
+        object.__setattr__(self, "_dirty_keys", set())
         for k, v in self._cfg.items():
             object.__setattr__(self, k, v)
 
     def __setattr__(self, name: str, value: Any) -> None:
         object.__setattr__(self, name, value)
-        if not name.startswith('_'):
+        if not name.startswith("_"):
             try:
                 self._cfg[name] = value
                 self._dirty_keys.add(name)
@@ -47,16 +47,22 @@ class AppConfig:
         Uses 4-space indentation to match the project's YAML style.
         """
         if self._yaml_file is None:
-            raise RuntimeError('No YAML file path set — cannot save config')
+            raise RuntimeError("No YAML file path set — cannot save config")
         if not self._dirty_keys:
             return
-        with open(self._yaml_file, encoding='utf-8') as f:
+        with open(self._yaml_file, encoding="utf-8") as f:
             original: dict[str, Any] = yaml.safe_load(f) or {}
         for key in self._dirty_keys:
             original[key] = self._cfg[key]
-        with open(self._yaml_file, 'wt', encoding='utf-8') as f:
-            yaml.dump(original, f, indent=4, default_flow_style=False,
-                      sort_keys=False, allow_unicode=True)
+        with open(self._yaml_file, "wt", encoding="utf-8") as f:
+            yaml.dump(
+                original,
+                f,
+                indent=4,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+            )
         self._dirty_keys.clear()
 
 
@@ -68,7 +74,7 @@ def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:
     """
     result: list[tuple[int, int]] = []
     for spec in banned_specs:
-        parts = spec.split('/')
+        parts = spec.split("/")
         if len(parts) == 2:
             try:
                 net_str, bits = parts[0], int(parts[1])
@@ -84,8 +90,8 @@ def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:
 
         quads = [0, 0, 0, 0]
         good = True
-        for i, quad in enumerate(net_str.split('.')):
-            if quad == '':
+        for i, quad in enumerate(net_str.split(".")):
+            if quad == "":
                 continue
             try:
                 quads[i] = int(quad)
@@ -95,8 +101,8 @@ def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:
         if not good:
             continue
 
-        net_buf = b''.join(struct.pack('!B', q) for q in quads)
-        net_int = struct.unpack('!I', net_buf)[0]
+        net_buf = b"".join(struct.pack("!B", q) for q in quads)
+        net_int = struct.unpack("!I", net_buf)[0]
         if bits == 0:
             bits = sum(8 for q in quads if q != 0)
         mask = (2 ** int(bits) - 1) << (32 - int(bits))
@@ -107,7 +113,7 @@ def make_fast_banned_list(banned_specs: list[str]) -> list[tuple[int, int]]:
 def is_banned(ip: str, fast_list: list[tuple[int, int]]) -> bool:
     """Return True if ip matches any (net, mask) tuple in fast_list."""
     try:
-        ip_int = struct.unpack('!I', socket.inet_aton(ip))[0]
+        ip_int = struct.unpack("!I", socket.inet_aton(ip))[0]
     except OSError:
         return False
     for net, mask in fast_list:
@@ -129,13 +135,13 @@ def load_config(yaml_path: str, admin_yaml_path: str | None = None) -> AppConfig
         return os.path.join(repo_root, path)
 
     main_path = _resolve(yaml_path)
-    with open(main_path, encoding='utf-8') as f:
+    with open(main_path, encoding="utf-8") as f:
         data: dict[str, Any] = yaml.safe_load(f) or {}
 
     if admin_yaml_path is not None:
         admin_path = _resolve(admin_yaml_path)
         if os.path.exists(admin_path):
-            with open(admin_path, encoding='utf-8') as f:
+            with open(admin_path, encoding="utf-8") as f:
                 admin_data: dict[str, Any] = yaml.safe_load(f) or {}
             data.update(admin_data)
 

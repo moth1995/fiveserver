@@ -69,8 +69,10 @@ def login():
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
-        if (username == current_app.config["ADMIN_USER"] and
-                password == current_app.config["ADMIN_PASSWORD"]):
+        if (
+            username == current_app.config["ADMIN_USER"]
+            and password == current_app.config["ADMIN_PASSWORD"]
+        ):
             session["admin_logged_in"] = True
             next_url = request.args.get("next") or url_for("admin.home")
             return redirect(next_url)
@@ -90,28 +92,31 @@ def logout():
 
 
 def _go_api_base() -> str:
-    host = os.environ.get('GO_API_HOST', 'fiveserver')
-    port = current_app.config['FS_CONFIG'].get('AdminPort', 8181)
-    return f'http://{host}:{port}'
+    host = os.environ.get("GO_API_HOST", "fiveserver")
+    port = current_app.config["FS_CONFIG"].get("AdminPort", 8181)
+    return f"http://{host}:{port}"
 
 
 def _go_auth() -> tuple[str, str]:
-    cfg = current_app.config['FS_CONFIG']
-    return cfg.get('AdminUser', ''), cfg.get('AdminPassword', '')
+    cfg = current_app.config["FS_CONFIG"]
+    return cfg.get("AdminUser", ""), cfg.get("AdminPassword", "")
 
 
-def _go_request(method: str, path: str, payload: dict[str, Any] | None = None) -> tuple[Any, int]:
+def _go_request(
+    method: str, path: str, payload: dict[str, Any] | None = None
+) -> tuple[Any, int]:
     """Send an authenticated request to the Go admin API."""
     import base64
-    url = f'{_go_api_base()}{path}'
+
+    url = f"{_go_api_base()}{path}"
     data = json.dumps(payload).encode() if payload is not None else None
     headers: dict[str, str] = {}
     if data is not None:
-        headers['Content-Type'] = 'application/json'
+        headers["Content-Type"] = "application/json"
     user, pw = _go_auth()
     if user:
-        token = base64.b64encode(f'{user}:{pw}'.encode()).decode()
-        headers['Authorization'] = f'Basic {token}'
+        token = base64.b64encode(f"{user}:{pw}".encode()).decode()
+        headers["Authorization"] = f"Basic {token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -119,14 +124,14 @@ def _go_request(method: str, path: str, payload: dict[str, Any] | None = None) -
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         logger.error("Go API %s %s returned %d: %s", method, path, e.code, body)
-        return {'error': body}, e.code
+        return {"error": body}, e.code
     except Exception as e:
         logger.error("Go API %s %s failed: %s", method, path, e)
-        return {'error': str(e)}, 503
+        return {"error": str(e)}, 503
 
 
 def _go_post(path: str, payload: dict[str, Any]) -> tuple[Any, int]:
-    return _go_request('POST', path, payload)
+    return _go_request("POST", path, payload)
 
 
 def _reload_go_config() -> None:
@@ -138,7 +143,7 @@ def _reload_go_config() -> None:
 
 
 def _get_online_users() -> list[dict[str, Any]]:
-    data, status = _go_request('GET', '/stats/users')
+    data, status = _go_request("GET", "/stats/users")
     if status == 200 and isinstance(data, list):
         return data
     if status != 503:
@@ -147,9 +152,9 @@ def _get_online_users() -> list[dict[str, Any]]:
 
 
 def _get_lobby_stats() -> dict[str, Any]:
-    data, status = _go_request('GET', '/lobby-stats')
+    data, status = _go_request("GET", "/lobby-stats")
     if status == 200:
-        return {lb['name']: lb for lb in data.get('lobbies', [])}
+        return {lb["name"]: lb for lb in data.get("lobbies", [])}
     if status != 503:
         logger.warning("Go API /lobby-stats returned %d", status)
     return {}
@@ -173,9 +178,14 @@ def home() -> str:
         lobbies_display = _parse_lobbies_from_form(request.form)
 
         if action == "lobby_add":
-            lobbies_display.append({
-                'name': '', 'type': 'open', 'show_matches': True, 'check_roster_hash': True,
-            })
+            lobbies_display.append(
+                {
+                    "name": "",
+                    "type": "open",
+                    "show_matches": True,
+                    "check_roster_hash": True,
+                }
+            )
             edit_mode = True
         elif action.startswith("lobby_remove_"):
             idx = int(action.split("_")[-1])
@@ -315,24 +325,28 @@ def chat() -> str:
                 payload["lobby"] = lobby
             _, status = _go_post("/admin/chat", payload)
             if status == 200:
-                success = f"Message sent to {'lobby ' + lobby if lobby else 'all lobbies'}."
+                success = (
+                    f"Message sent to {'lobby ' + lobby if lobby else 'all lobbies'}."
+                )
             else:
                 error = "Go server unavailable or lobby not found."
 
     # Lobby names for comboboxes
     lobby_names: list[str] = [
-        (lb if isinstance(lb, str) else lb.get('name', ''))
+        (lb if isinstance(lb, str) else lb.get("name", ""))
         for lb in cfg.get("Lobbies", [])
         if isinstance(lb, str) or isinstance(lb, dict)
     ]
     lobby_names = [n for n in lobby_names if n]
 
     # Fetch chat history
-    path = '/admin/chat' + (f'?lobby={urllib.parse.quote(lobby_filter)}' if lobby_filter else '')
+    path = "/admin/chat" + (
+        f"?lobby={urllib.parse.quote(lobby_filter)}" if lobby_filter else ""
+    )
     lobbies_chat: list[dict[str, Any]] = []
-    data, status = _go_request('GET', path)
+    data, status = _go_request("GET", path)
     if status == 200:
-        lobbies_chat = data.get('lobbies', [])
+        lobbies_chat = data.get("lobbies", [])
     elif status != 503:
         logger.warning("Go API /admin/chat returned %d", status)
 
@@ -368,19 +382,23 @@ def kick():
 @admin_bp.route("/api/lobby-stats")
 def api_lobby_stats():
     # lobby_stats_list preserves Go's lobby order so JS can match by index
-    raw, status = _go_request('GET', '/lobby-stats')
-    lobby_stats_list: list = raw.get('lobbies', []) if status == 200 else []
-    return jsonify({
-        "users": _get_online_users(),
-        "lobby_stats": lobby_stats_list,
-    })
+    raw, status = _go_request("GET", "/lobby-stats")
+    lobby_stats_list: list = raw.get("lobbies", []) if status == 200 else []
+    return jsonify(
+        {
+            "users": _get_online_users(),
+            "lobby_stats": lobby_stats_list,
+        }
+    )
 
 
 @admin_bp.route("/api/chat")
 def api_chat():
     lobby_filter = request.args.get("lobby", "")
-    path = '/admin/chat' + (f'?lobby={urllib.parse.quote(lobby_filter)}' if lobby_filter else '')
-    data, status = _go_request('GET', path)
+    path = "/admin/chat" + (
+        f"?lobby={urllib.parse.quote(lobby_filter)}" if lobby_filter else ""
+    )
+    data, status = _go_request("GET", path)
     if status == 200:
         return jsonify(data)
     logger.warning("Go API /admin/chat (api) returned %d", status)
@@ -398,7 +416,7 @@ def _read_log_lines(selected: str, n_lines: int) -> list[str]:
     log_file: str = cfg.get(log_keys.get(selected, "FiveserverLogFile"), "")
     if not log_file:
         return []
-    repo_root = current_app.config['REPO_ROOT']
+    repo_root = current_app.config["REPO_ROOT"]
     if not os.path.isabs(log_file):
         log_file = os.path.join(repo_root, log_file)
     logger.debug("Log viewer reading: %s", log_file)
@@ -584,26 +602,26 @@ def userunlock() -> str | tuple[str, int]:
 
 # Division types stored as single-element lists in YAML: ['1'], ['2'], etc.
 # 'open' and 'noStats' are plain strings. 'open' is the default (no type key needed).
-_DIV_TYPES: set[str] = {'A', '3B', '3A', '2', '1'}
+_DIV_TYPES: set[str] = {"A", "3B", "3A", "2", "1"}
 
 
 def _yaml_type_to_ui(type_val: Any) -> str:
     """Convert a YAML lobby type value to a single select option string."""
     if isinstance(type_val, list):
         # e.g. ['A'] → 'A', ['1'] → '1'
-        return type_val[0] if type_val else 'open'
+        return type_val[0] if type_val else "open"
     if isinstance(type_val, str) and type_val:
         return type_val  # 'noStats' or 'open'
-    return 'open'
+    return "open"
 
 
 def _ui_type_to_yaml(ui_type: str) -> Any:
     """Convert a select option string back to the YAML type value."""
     if ui_type in _DIV_TYPES:
         return [ui_type]
-    if ui_type == 'noStats':
-        return 'noStats'
-    return 'open'  # caller will omit this from the dict
+    if ui_type == "noStats":
+        return "noStats"
+    return "open"  # caller will omit this from the dict
 
 
 def _normalize_lobbies(raw: list[Any]) -> list[dict[str, Any]]:
@@ -616,19 +634,23 @@ def _normalize_lobbies(raw: list[Any]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for entry in raw:
         if isinstance(entry, str):
-            result.append({
-                'name': entry,
-                'type': 'open',
-                'show_matches': True,
-                'check_roster_hash': True,
-            })
+            result.append(
+                {
+                    "name": entry,
+                    "type": "open",
+                    "show_matches": True,
+                    "check_roster_hash": True,
+                }
+            )
         elif isinstance(entry, dict):
-            result.append({
-                'name': entry.get('name', ''),
-                'type': _yaml_type_to_ui(entry.get('type', 'open')),
-                'show_matches': bool(entry.get('showMatches', True)),
-                'check_roster_hash': bool(entry.get('checkRosterHash', True)),
-            })
+            result.append(
+                {
+                    "name": entry.get("name", ""),
+                    "type": _yaml_type_to_ui(entry.get("type", "open")),
+                    "show_matches": bool(entry.get("showMatches", True)),
+                    "check_roster_hash": bool(entry.get("checkRosterHash", True)),
+                }
+            )
     return result
 
 
@@ -640,39 +662,41 @@ def _lobbies_to_yaml(lobbies: list[dict[str, Any]]) -> list[Any]:
     """
     result: list[Any] = []
     for lb in lobbies:
-        name = lb['name'].strip()
+        name = lb["name"].strip()
         if not name:
             continue
-        ui_type: str = lb.get('type', 'open')
-        show: bool = lb['show_matches']
-        roster: bool = lb['check_roster_hash']
+        ui_type: str = lb.get("type", "open")
+        show: bool = lb["show_matches"]
+        roster: bool = lb["check_roster_hash"]
         # Simple case — plain string, no extras needed
-        if ui_type == 'open' and show and roster:
+        if ui_type == "open" and show and roster:
             result.append(name)
             continue
-        d: dict[str, Any] = {'name': name}
+        d: dict[str, Any] = {"name": name}
         yaml_type = _ui_type_to_yaml(ui_type)
-        if yaml_type != 'open':
-            d['type'] = yaml_type
+        if yaml_type != "open":
+            d["type"] = yaml_type
         if not show:
-            d['showMatches'] = False
+            d["showMatches"] = False
         if not roster:
-            d['checkRosterHash'] = False
+            d["checkRosterHash"] = False
         result.append(d)
     return result
 
 
 def _parse_lobbies_from_form(form: Any) -> list[dict[str, Any]]:
     """Reconstruct lobby list from indexed form fields."""
-    count = int(form.get('lobby_count', 0))
+    count = int(form.get("lobby_count", 0))
     lobbies: list[dict[str, Any]] = []
     for i in range(count):
-        lobbies.append({
-            'name': form.get(f'lobby_name_{i}', '').strip(),
-            'type': form.get(f'lobby_type_{i}', 'open'),
-            'show_matches': f'lobby_show_{i}' in form,
-            'check_roster_hash': f'lobby_roster_{i}' in form,
-        })
+        lobbies.append(
+            {
+                "name": form.get(f"lobby_name_{i}", "").strip(),
+                "type": form.get(f"lobby_type_{i}", "open"),
+                "show_matches": f"lobby_show_{i}" in form,
+                "check_roster_hash": f"lobby_roster_{i}" in form,
+            }
+        )
     return lobbies
 
 
@@ -742,7 +766,9 @@ def settings() -> str:
     ranks: dict[str, Any] = cfg.get("ComputeRanksInterval", {})
     chat: dict[str, Any] = cfg.get("Chat", {})
     greeting: Any = cfg.get("Greeting", "")
-    greeting_text: str = greeting.get("text", "") if isinstance(greeting, dict) else str(greeting)
+    greeting_text: str = (
+        greeting.get("text", "") if isinstance(greeting, dict) else str(greeting)
+    )
 
     return render_template(
         "admin/settings.html",
@@ -778,7 +804,7 @@ def banned() -> str:
 
         import yaml as _yaml
 
-        repo_root = current_app.config['REPO_ROOT']
+        repo_root = current_app.config["REPO_ROOT"]
         banned_file: str = cfg.get("BannedList", "")
         if banned_file:
             if not _os.path.isabs(banned_file):
@@ -797,7 +823,7 @@ def _load_banned_file() -> tuple[list[str], str]:
     import yaml as _yaml
 
     cfg = current_app.config["FS_CONFIG"]
-    repo_root = current_app.config['REPO_ROOT']
+    repo_root = current_app.config["REPO_ROOT"]
     banned_file: str = cfg.get("BannedList", "")
     if banned_file and not os.path.isabs(banned_file):
         banned_file = os.path.join(repo_root, banned_file)
