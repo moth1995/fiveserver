@@ -1,0 +1,57 @@
+ServerIP: auto
+ServerName: "Fiveserver"
+MaxUsers: 1000
+
+Lobbies:
+    - 'Russia'
+    - 'England'
+    - name: 'Training'
+      type: noStats
+
+GamePorts:
+    pes5: 16001
+    we9: 18001
+    we9le: 19501
+
+NetworkServer:
+    mainService: 20100
+    networkMenuService: 20101
+    loginService:
+        pes5: 20102
+        we9: 20103
+        we9le: 20104
+
+WebInterface:
+    port: 80
+    securePort: 443
+    useSecure: false
+
+Debug: false
+
+DB:
+    name: fiveserver
+    user: testuser
+    password: testpassword
+    readServers: [127.0.0.1]
+    writeServers: [127.0.0.1]
+    sharePool: true
+    ConnectionPool:
+        minConnections: 1
+        maxConnections: 3
+        keepAliveInterval: 60
+
+BannedList: ""
+
+Chat:
+    bannedWords: []
+
+Roster:
+    enforceHash: false
+    compareHash: true
+
+Disconnects:
+    CountAsLoss:
+        Enabled: false
+        Score:
+            player: 0
+            opponent: 3

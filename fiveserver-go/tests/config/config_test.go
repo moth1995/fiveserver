@@ -23,8 +23,7 @@ func writeTemp(t *testing.T, content string) string {
 }
 
 func TestLoad_RealFiveserverYaml(t *testing.T) {
-	// Walk up from tests/config to find the Go-specific config
-	path := filepath.Join("..", "..", "config", "fiveserver.yaml")
+	path := filepath.Join("testdata", "fiveserver.yaml")
 	cfg, err := config.Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
