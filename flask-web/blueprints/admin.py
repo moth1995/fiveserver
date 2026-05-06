@@ -214,8 +214,9 @@ def user_detail(user_id: int) -> str:
 def profiles() -> str:
     offset: int = int(request.args.get("offset", 0))
     limit: int = int(request.args.get("limit", 50))
+    query: str = request.args.get("q", "").strip()
     conn = get_db()
-    total, rows = browse_profiles(conn, offset=offset, limit=limit)
+    total, rows = browse_profiles(conn, offset=offset, limit=limit, query=query)
     return render_template(
         "admin/users.html",
         users=[],
@@ -223,7 +224,7 @@ def profiles() -> str:
         offset=offset,
         limit=limit,
         total=total,
-        query="",
+        query=query,
         profiles_mode=True,
     )
 
