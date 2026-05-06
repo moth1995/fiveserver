@@ -17,11 +17,6 @@ import (
 
 // ---- top-level config -------------------------------------------------------
 
-type LogConfig struct {
-	File  string `yaml:"file"`
-	Level string `yaml:"level"`
-}
-
 type Config struct {
 	ServerIP             string              `yaml:"ServerIP"`
 	ListenOn             string              `yaml:"ListenOn"`
@@ -31,7 +26,6 @@ type Config struct {
 	NetworkServer        NetworkServerConfig `yaml:"NetworkServer"`
 	WebInterface         WebInterfaceConfig  `yaml:"WebInterface"`
 	Debug                bool                `yaml:"Debug"`
-	Log                  LogConfig           `yaml:"Log"`
 	DB                   DBConfig            `yaml:"DB"`
 	BannedList           string              `yaml:"BannedList"`
 	Chat                 ChatConfig          `yaml:"Chat"`
@@ -413,14 +407,6 @@ func (c *Config) Reload(filePath string) ([]string, error) {
 	if c.Debug != fresh.Debug {
 		changes = append(changes, fmt.Sprintf("Debug: %v -> %v", c.Debug, fresh.Debug))
 		c.Debug = fresh.Debug
-	}
-	if c.Log.Level != fresh.Log.Level {
-		changes = append(changes, fmt.Sprintf("Log.Level: %q -> %q", c.Log.Level, fresh.Log.Level))
-		c.Log.Level = fresh.Log.Level
-	}
-	if c.Log.File != fresh.Log.File {
-		changes = append(changes, fmt.Sprintf("Log.File: %q -> %q", c.Log.File, fresh.Log.File))
-		c.Log.File = fresh.Log.File
 	}
 	if c.ServerName != fresh.ServerName {
 		changes = append(changes, fmt.Sprintf("ServerName: %q -> %q", c.ServerName, fresh.ServerName))

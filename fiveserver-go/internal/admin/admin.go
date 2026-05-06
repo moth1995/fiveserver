@@ -186,8 +186,6 @@ func (srv *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	c := srv.cfg
 	type configView struct {
 		Debug         bool                    `json:"debug"`
-		LogLevel      string                  `json:"log_level"`
-		LogFile       string                  `json:"log_file"`
 		ServerName    string                  `json:"server_name"`
 		GreetingText  string                  `json:"greeting_text"`
 		MaxUsers      int                     `json:"max_users"`
@@ -205,8 +203,6 @@ func (srv *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	view := configView{
 		Debug:         c.Debug,
-		LogLevel:      c.Log.Level,
-		LogFile:       c.Log.File,
 		ServerName:    c.ServerName,
 		GreetingText:  c.Greeting.Text,
 		MaxUsers:      c.MaxUsers,
@@ -230,11 +226,11 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	level := srv.cfg.Log.Level
-	if srv.cfg.Debug && level != "debug" {
-		level = "debug"
+	if srv.cfg.Debug {
+		logger.SetLevel("debug")
+	} else {
+		logger.SetLevel("info")
 	}
-	logger.SetLevel(level)
 	logger.Infof("[admin] config reloaded: %d change(s)", len(changes))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{

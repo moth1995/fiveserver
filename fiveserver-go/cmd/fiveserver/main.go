@@ -51,11 +51,8 @@ func main() {
 	// ---- 1b. Re-init logger with configured file and level ---------------------
 	// FiveserverLogFile from admin.yaml takes precedence over Log.File from fiveserver.yaml.
 	logFile := adminCfg.FiveserverLogFile
-	if logFile == "" {
-		logFile = cfg.Log.File
-	}
-	logLevel := cfg.Log.Level
-	if cfg.Debug && logLevel != "debug" {
+	logLevel := "info"
+	if cfg.Debug {
 		logLevel = "debug"
 	}
 	if err := logger.Init(logLevel, logFile); err != nil {
@@ -89,6 +86,7 @@ func main() {
 	// ---- 4. Shared Hub ---------------------------------------------------------
 	hub := protocol.NewHub(cfg)
 	protocol.StartDayChangeTimer(hub)
+	startRanksTimer(sc, cfg)
 
 	// ---- 5. Listeners ----------------------------------------------------------
 	var wg sync.WaitGroup
@@ -168,9 +166,30 @@ func main() {
 	}
 
 	// ---- 7. Wait for shutdown signal -------------------------------------------
+
 	logger.Infof("fiveserver: all listeners started — Ctrl+C to stop")
 	<-ctx.Done()
 	logger.Infof("fiveserver: shutting down…")
 	wg.Wait()
 	logger.Infof("fiveserver: stopped")
+}
+
+// startRanksTimer schedules periodic rank recomputation based on
+// ComputeRanksInterval from fiveserver.yaml (mirrors Python computeRanks timer).
+// Interval = days*86400 + seconds. Falls back to 24 h if both are zero.
+func startRanksTimer(sc *db.StorageController, cfg *config.Config) {
+	interval := time.Duration(cfg.ComputeRanksInterval.Days)*24*time.Hour +
+		time.Duration(cfg.ComputeRanksInterval.Seconds)*time.Second
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+	var tick func()
+	tick = func() {
+		logger.Infof("[ranks] recomputing ranks (interval=%s)", interval)
+		if err := db.ComputeRanks(context.Background(), sc); err != nil {
+			logger.Errorf("[ranks] ComputeRanks failed: %v", err)
+		}
+		time.AfterFunc(interval, tick)
+	}
+	time.AfterFunc(interval, tick)
 }
