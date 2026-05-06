@@ -98,7 +98,7 @@ func TestDo3088_Settings1_Stored(t *testing.T) {
 		t.Fatalf("stored Settings1 is not valid zlib: %v", err)
 	}
 	dec, err := io.ReadAll(r)
-	r.Close()
+	_ = r.Close()
 	if err != nil {
 		t.Fatalf("decompress Settings1: %v", err)
 	}

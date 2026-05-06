@@ -38,7 +38,7 @@ func TestNewPool_SingleServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPool: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 	if p.DB() == nil {
 		t.Fatal("DB() returned nil")
 	}
@@ -59,7 +59,7 @@ func TestPool_RoundRobin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewPool: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	// Call DB() 4 times — should cycle through both handles
 	seen := map[interface{}]int{}
@@ -85,7 +85,7 @@ func TestNewStorageController_SharePool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStorageController: %v", err)
 	}
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 	if sc.Read != sc.Write {
 		t.Error("SharePool=true: Read and Write pools should be the same pointer")
 	}
@@ -105,7 +105,7 @@ func TestNewStorageController_SeparatePools(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStorageController: %v", err)
 	}
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 	if sc.Read == sc.Write {
 		t.Error("SharePool=false: Read and Write pools should be different pointers")
 	}
@@ -125,7 +125,7 @@ func TestStartKeepAlive_StopsOnCancel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStorageController: %v", err)
 	}
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	sc.StartKeepAlive(ctx, 10*time.Millisecond)

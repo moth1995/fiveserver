@@ -3,7 +3,7 @@ package crypto
 import (
 	"fmt"
 
-	"golang.org/x/crypto/blowfish"
+	"golang.org/x/crypto/blowfish" //nolint:staticcheck
 )
 
 // DecryptECB decrypts data using Blowfish ECB mode with the given key.

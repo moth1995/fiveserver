@@ -30,18 +30,6 @@ func scanUser(row *sql.Row) (*model.User, error) {
 	return &u, nil
 }
 
-func scanUserRows(rows *sql.Rows) ([]*model.User, error) {
-	var out []*model.User
-	for rows.Next() {
-		var u model.User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Serial, &u.Hash, &u.ResetNonce, &u.Deleted); err != nil {
-			return nil, fmt.Errorf("db/user: scan row: %w", err)
-		}
-		out = append(out, &u)
-	}
-	return out, rows.Err()
-}
-
 // GetUserByID fetches a non-deleted user by primary key.
 func GetUserByID(ctx context.Context, sc *StorageController, id int) (*model.User, error) {
 	if sc == nil {

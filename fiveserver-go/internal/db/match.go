@@ -19,7 +19,7 @@ func RecordMatch(ctx context.Context, sc *StorageController, m *model.Match) (in
 	if err != nil {
 		return 0, fmt.Errorf("db/match: begin tx: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	// 1. Insert match row
 	res, err := tx.ExecContext(ctx,
@@ -153,7 +153,7 @@ ORDER BY t.id DESC LIMIT ?`
 	if err != nil {
 		return nil, fmt.Errorf("db/match: get last matches: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var out []*MatchRow
 	for rows.Next() {

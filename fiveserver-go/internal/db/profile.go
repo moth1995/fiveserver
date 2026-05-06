@@ -39,7 +39,7 @@ func GetProfileByID(ctx context.Context, sc *StorageController, id int) (*model.
 	if err != nil {
 		return nil, fmt.Errorf("db/profile: query by id: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	if !rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, fmt.Errorf("db/profile: rows: %w", err)
@@ -66,7 +66,7 @@ func GetProfilesByUserID(ctx context.Context, sc *StorageController, userID int)
 	if err != nil {
 		return nil, fmt.Errorf("db/profile: query by user_id: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*model.Profile
 	for rows.Next() {
 		p, err := scanProfile(rows)

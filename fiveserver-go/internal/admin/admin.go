@@ -110,7 +110,9 @@ func (srv *Server) handleBroadcast(w http.ResponseWriter, r *http.Request) {
 
 	logger.Infof("[admin] broadcast %q to %d lobby/lobbies", req.Message, sent)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]int{"lobbies": sent})
+	if err := json.NewEncoder(w).Encode(map[string]int{"lobbies": sent}); err != nil {
+		logger.Errorf("[admin] handleBroadcast: encode response: %v", err)
+	}
 }
 
 // handleUsers handles GET /stats/users — returns all online sessions.
@@ -149,7 +151,9 @@ func (srv *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(out)
+	if err := json.NewEncoder(w).Encode(out); err != nil {
+		logger.Errorf("[admin] handleUsers: encode response: %v", err)
+	}
 }
 
 // handleKick handles POST /api/kick — closes the connection for a named profile.
@@ -178,7 +182,9 @@ func (srv *Server) handleKick(w http.ResponseWriter, r *http.Request) {
 	srv.hub.KickSession(s)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile})
+	if err := json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile}); err != nil {
+		logger.Errorf("[admin] handleKick: encode response: %v", err)
+	}
 }
 
 // handleGetConfig handles GET /api/config — returns live-reloadable config fields.
@@ -215,7 +221,9 @@ func (srv *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
 		Roster:        c.Roster,
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(view)
+	if err := json.NewEncoder(w).Encode(view); err != nil {
+		logger.Errorf("[admin] handleGetConfig: encode response: %v", err)
+	}
 }
 
 // handleReloadConfig handles POST /api/reload-config — re-reads the YAML file
@@ -234,10 +242,12 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 	srv.hub.SyncLobbiesFromConfig()
 	logger.Infof("[admin] config reloaded: %d change(s)", len(changes))
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	if err := json.NewEncoder(w).Encode(map[string]any{
 		"changes": changes,
 		"count":   len(changes),
-	})
+	}); err != nil {
+		logger.Errorf("[admin] handleReloadConfig: encode response: %v", err)
+	}
 }
 
 // handleLobbyStats handles GET /lobby-stats — returns per-lobby player counts and
@@ -291,7 +301,9 @@ func (srv *Server) handleLobbyStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"lobbies": out})
+	if err := json.NewEncoder(w).Encode(map[string]any{"lobbies": out}); err != nil {
+		logger.Errorf("[admin] handleLobbyStats: encode response: %v", err)
+	}
 }
 
 // handleChatHistory handles GET /admin/chat
@@ -334,5 +346,7 @@ func (srv *Server) handleChatHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{"lobbies": out})
+	if err := json.NewEncoder(w).Encode(map[string]any{"lobbies": out}); err != nil {
+		logger.Errorf("[admin] handleChatHistory: encode response: %v", err)
+	}
 }

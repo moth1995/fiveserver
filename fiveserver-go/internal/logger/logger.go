@@ -110,10 +110,12 @@ func Debug(msg string, args ...any)    { get().Debug(msg, args...) }
 func Info(msg string, args ...any)     { get().Info(msg, args...) }
 func Warn(msg string, args ...any)     { get().Warn(msg, args...) }
 func Error(msg string, args ...any)    { get().Error(msg, args...) }
-func Critical(msg string, args ...any) { get().Log(nil, LevelCritical, msg, args...) }
+func Critical(msg string, args ...any) { get().Log(context.TODO(), LevelCritical, msg, args...) }
 
 func Debugf(format string, args ...any)    { get().Debug(fmt.Sprintf(format, args...)) }
 func Infof(format string, args ...any)     { get().Info(fmt.Sprintf(format, args...)) }
 func Warnf(format string, args ...any)     { get().Warn(fmt.Sprintf(format, args...)) }
 func Errorf(format string, args ...any)    { get().Error(fmt.Sprintf(format, args...)) }
-func Criticalf(format string, args ...any) { get().Log(nil, LevelCritical, fmt.Sprintf(format, args...)) }
+func Criticalf(format string, args ...any) {
+	get().Log(context.TODO(), LevelCritical, fmt.Sprintf(format, args...))
+}
