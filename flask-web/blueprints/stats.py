@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import calendar
 from datetime import date, timedelta
 from typing import Any
 
@@ -21,6 +20,7 @@ from db import (
     stats_top_teams,
     stats_top_rosters,
     stats_summary,
+    stats_top_online_users,
 )
 
 stats_bp = Blueprint("stats", __name__, url_prefix="/stats")
@@ -38,69 +38,109 @@ def check_auth():
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# Preset definitions
+# ---------------------------------------------------------------------------
+
+_PRESETS: list[dict[str, str]] = [
+    {"value": "today",        "label": "Today"},
+    {"value": "yesterday",    "label": "Yesterday"},
+    {"value": "last7",        "label": "Last 7 days"},
+    {"value": "last30",       "label": "Last 30 days"},
+    {"value": "this_month",   "label": "This month"},
+    {"value": "last_month",   "label": "Last month"},
+    {"value": "last3months",  "label": "Last 3 months"},
+    {"value": "last_year",    "label": "Last year"},
+    {"value": "custom",       "label": "Custom range"},
+]
+
+
+def _preset_range(preset: str) -> tuple[date, date]:
+    """Return (date_from, date_to) for a named preset."""
+    today = date.today()
+    if preset == "yesterday":
+        d = today - timedelta(days=1)
+        return d, d
+    if preset == "last7":
+        return today - timedelta(days=6), today
+    if preset == "last30":
+        return today - timedelta(days=29), today
+    if preset == "this_month":
+        return today.replace(day=1), today
+    if preset == "last_month":
+        first_this = today.replace(day=1)
+        last_prev = first_this - timedelta(days=1)
+        return last_prev.replace(day=1), last_prev
+    if preset == "last3months":
+        return today - timedelta(days=89), today
+    if preset == "last_year":
+        return today - timedelta(days=364), today
+    # default: today
+    return today, today
+
+
+# ---------------------------------------------------------------------------
+# Filter parsing
 # ---------------------------------------------------------------------------
 
 
-def _parse_filters() -> tuple[int, int, date, date]:
-    """Return (year, month, date_from, date_to) from request args."""
+def _parse_filters() -> tuple[str, date, date]:
+    """Return (preset, date_from, date_to) from request args."""
     today = date.today()
-    month_str: str = request.args.get("month", today.strftime("%Y-%m"))
-    try:
-        year, month = int(month_str[:4]), int(month_str[5:7])
-    except (ValueError, IndexError):
-        year, month = today.year, today.month
+    preset = request.args.get("preset", "today")
+    valid_presets = {p["value"] for p in _PRESETS}
+    if preset not in valid_presets:
+        preset = "today"
 
-    days_in_month = calendar.monthrange(year, month)[1]
-    default_from = date(year, month, 1)
-    default_to = date(year, month, days_in_month)
+    if preset == "custom":
+        try:
+            date_from = date.fromisoformat(request.args.get("from", ""))
+        except ValueError:
+            date_from = today
+        try:
+            date_to = date.fromisoformat(request.args.get("to", ""))
+        except ValueError:
+            date_to = today
+        if date_from > date_to:
+            date_from, date_to = date_to, date_from
+    else:
+        date_from, date_to = _preset_range(preset)
 
-    try:
-        date_from = date.fromisoformat(request.args.get("from", ""))
-    except ValueError:
-        date_from = default_from
-    try:
-        date_to = date.fromisoformat(request.args.get("to", ""))
-    except ValueError:
-        date_to = default_to
+    return preset, date_from, date_to
 
-    return year, month, date_from, date_to
+
+# ---------------------------------------------------------------------------
+# Routes
+# ---------------------------------------------------------------------------
 
 
 @stats_bp.route("/")
 @stats_bp.route("/home")
 def home() -> str:
-    year, month, date_from, date_to = _parse_filters()
-    month_label = date(year, month, 1).strftime("%B %Y")
+    preset, date_from, date_to = _parse_filters()
 
     conn = get_db()
-    matches_per_day: list[dict[str, Any]] = stats_matches_per_day(conn, year, month)
+    matches_per_day: list[dict[str, Any]] = stats_matches_per_day(conn, date_from, date_to)
     max_daily: int = max((d["count"] for d in matches_per_day), default=1) or 1
     top_teams: list[dict[str, Any]] = stats_top_teams(conn, date_from, date_to)
     top_rosters: list[dict[str, Any]] = stats_top_rosters(conn, date_from, date_to)
     summary: dict[str, Any] = stats_summary(conn, date_from, date_to)
+    top_online: list[dict[str, Any]] = stats_top_online_users(conn)
 
-    month_options: list[dict[str, str]] = []
-    cursor = date.today().replace(day=1)
-    for _ in range(12):
-        month_options.append(
-            {
-                "value": cursor.strftime("%Y-%m"),
-                "label": cursor.strftime("%B %Y"),
-            }
-        )
-        cursor = (cursor - timedelta(days=1)).replace(day=1)
+    # Enrich top_online with formatted hours
+    for u in top_online:
+        secs = u.get("total_online_seconds", 0) or 0
+        u["hours"] = round(secs / 3600, 1)
 
     return render_template(
         "stats/home.html",
-        month_label=month_label,
-        selected_month=date(year, month, 1).strftime("%Y-%m"),
+        preset=preset,
+        presets=_PRESETS,
         date_from=date_from.isoformat(),
         date_to=date_to.isoformat(),
-        month_options=month_options,
         summary=summary,
         matches_per_day=matches_per_day,
         max_daily=max_daily,
         top_teams=top_teams,
         top_rosters=top_rosters,
+        top_online=top_online,
     )

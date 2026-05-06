@@ -52,7 +52,7 @@ def teardown_db(exception: BaseException | None) -> None:
 # User queries  (ported from lib/fiveserver/data.py — UserData)
 # ---------------------------------------------------------------------------
 
-_USER_COLS = "id, username, serial, hash, reset_nonce, updated_on, deleted"
+_USER_COLS = "id, username, serial, hash, reset_nonce, updated_on, deleted, total_online_seconds"
 
 
 def find_user_by_id(
@@ -346,25 +346,34 @@ def record_user_registration(
 
 
 def stats_matches_per_day(
-    conn: pymysql.connections.Connection, year: int, month: int
+    conn: pymysql.connections.Connection, date_from: Any, date_to: Any
 ) -> list[dict[str, Any]]:
-    """Return [{day, count}] for every day in the given month."""
-    import calendar
-    from datetime import date
+    """Return [{date, label, count}] for every day in [date_from, date_to]."""
+    from datetime import date as date_cls, timedelta
 
-    days_in_month = calendar.monthrange(year, month)[1]
-    date_from = date(year, month, 1)
-    date_to = date(year, month, days_in_month)
+    if not isinstance(date_from, date_cls):
+        date_from = date_cls.fromisoformat(str(date_from))
+    if not isinstance(date_to, date_cls):
+        date_to = date_cls.fromisoformat(str(date_to))
+
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT DAY(played_on) AS day, COUNT(*) AS count "
+            "SELECT DATE(played_on) AS d, COUNT(*) AS count "
             "FROM matches "
             "WHERE DATE(played_on) BETWEEN %s AND %s "
-            "GROUP BY DAY(played_on)",
+            "GROUP BY DATE(played_on)",
             (date_from, date_to),
         )
-        rows: dict[int, int] = {r["day"]: r["count"] for r in cur.fetchall()}
-    return [{"day": d, "count": rows.get(d, 0)} for d in range(1, days_in_month + 1)]
+        rows: dict[str, int] = {str(r["d"]): r["count"] for r in cur.fetchall()}  # type: ignore[index]
+
+    span = (date_to - date_from).days + 1
+    result = []
+    for i in range(span):
+        d = date_from + timedelta(days=i)
+        key = str(d)
+        label = str(d.day) if span <= 31 else d.strftime("%b %d").lstrip("0")
+        result.append({"date": key, "label": label, "count": rows.get(key, 0)})
+    return result
 
 
 def stats_top_teams(
@@ -443,3 +452,17 @@ def stats_summary(
         "new_users": new_users,
         "avg_goals_per_match": avg_goals,
     }
+
+
+def stats_top_online_users(
+    conn: pymysql.connections.Connection, limit: int = 10
+) -> list[dict[str, Any]]:
+    """Return [{username, total_online_seconds}] sorted by most time online (all-time)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT username, total_online_seconds "
+            "FROM users WHERE deleted = 0 AND total_online_seconds > 0 "
+            "ORDER BY total_online_seconds DESC LIMIT %s",
+            (limit,),
+        )
+        return cur.fetchall()  # type: ignore[return-value]

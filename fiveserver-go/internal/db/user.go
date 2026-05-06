@@ -15,12 +15,12 @@ var ErrNotFound = errors.New("db: not found")
 // ErrNoDB is returned when a nil *StorageController is passed to a DB function.
 var ErrNoDB = errors.New("db: no storage controller")
 
-const userSelectCols = `id, username, serial, hash, COALESCE(reset_nonce,''), deleted`
+const userSelectCols = `id, username, serial, hash, COALESCE(reset_nonce,''), deleted, total_online_seconds`
 
 func scanUser(row *sql.Row) (*model.User, error) {
 	var u model.User
 	var deleted bool
-	if err := row.Scan(&u.ID, &u.Username, &u.Serial, &u.Hash, &u.ResetNonce, &deleted); err != nil {
+	if err := row.Scan(&u.ID, &u.Username, &u.Serial, &u.Hash, &u.ResetNonce, &deleted, &u.TotalOnlineSeconds); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -126,6 +126,22 @@ func DeleteUser(ctx context.Context, sc *StorageController, id int) error {
 	q := `UPDATE users SET deleted=1 WHERE id=?`
 	if _, err := sc.Write.DB().ExecContext(ctx, q, id); err != nil {
 		return fmt.Errorf("db/user: delete: %w", err)
+	}
+	return nil
+}
+
+// AddUserOnlineSeconds atomically increments total_online_seconds for a user.
+// Called when a user's grace period expires confirming they are truly offline.
+func AddUserOnlineSeconds(ctx context.Context, sc *StorageController, userID int, seconds int64) error {
+	if sc == nil {
+		return ErrNoDB
+	}
+	if seconds <= 0 {
+		return nil
+	}
+	q := `UPDATE users SET total_online_seconds = total_online_seconds + ? WHERE id = ?`
+	if _, err := sc.Write.DB().ExecContext(ctx, q, seconds, userID); err != nil {
+		return fmt.Errorf("db/user: add online seconds: %w", err)
 	}
 	return nil
 }

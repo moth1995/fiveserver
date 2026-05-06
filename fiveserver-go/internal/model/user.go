@@ -2,12 +2,13 @@ package model
 
 // User mirrors the `users` table in sql/schema.sql.
 type User struct {
-	ID         int
-	Username   string
-	Serial     string
-	Hash       string  // 32-char hex string stored in DB (Blowfish-encrypted)
-	ResetNonce string  // null when not locked
-	Deleted    bool
+	ID                 int
+	Username           string
+	Serial             string
+	Hash               string // 32-char hex string stored in DB (Blowfish-encrypted)
+	ResetNonce         string // null when not locked
+	Deleted            bool
+	TotalOnlineSeconds int64
 }
 
 // UserInfo holds per-connection game metadata (not persisted).

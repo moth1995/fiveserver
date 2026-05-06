@@ -21,7 +21,7 @@
 {% if online_users %}
 <div class="table-wrap">
 <table>
-  <thead><tr><th>Username</th><th>Lobby</th><th>IP</th><th>Connected Since</th><th></th></tr></thead>
+  <thead><tr><th>Username</th><th>Lobby</th><th>IP</th><th>Session</th><th>Total Online</th><th></th></tr></thead>
   <tbody id="online-players-body">
   {% for u in online_users %}
   <tr>
@@ -29,6 +29,7 @@
     <td>{{ u.lobby }}</td>
     <td class="addr-cell">{{ u.addr }}</td>
     <td>{{ u.online_seconds | format_duration }}</td>
+    <td>{{ u.total_online_seconds | format_duration }}</td>
     <td><button class="btn btn-danger btn-sm" onclick="kickPlayer('{{ u.profile }}', this)">Kick</button></td>
   </tr>
   {% endfor %}
@@ -237,10 +238,10 @@ function refreshStats() {
         wrap.innerHTML = '<p id="online-empty" style="color:#64748b;">No players currently online.</p>';
       } else {
         var rows = users.map(function(u) {
-          return '<tr><td>' + (u.username||'') + '</td><td>' + (u.lobby||'') + '</td><td class="addr-cell">' + (u.addr||'') + '</td><td>' + fmtDuration(u.online_seconds) + '</td><td><button class="btn btn-danger btn-sm" onclick="kickPlayer(\'' + (u.profile||'') + '\',this)">Kick</button></td></tr>';
+          return '<tr><td>' + (u.username||'') + '</td><td>' + (u.lobby||'') + '</td><td class="addr-cell">' + (u.addr||'') + '</td><td>' + fmtDuration(u.online_seconds) + '</td><td>' + fmtDuration(u.total_online_seconds) + '</td><td><button class="btn btn-danger btn-sm" onclick="kickPlayer(\'' + (u.profile||'') + '\',this)">Kick</button></td></tr>';
         }).join('');
         if (!tbody) {
-          wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Username</th><th>Lobby</th><th>IP</th><th>Connected Since</th><th></th></tr></thead><tbody id="online-players-body">' + rows + '</tbody></table></div>';
+          wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Username</th><th>Lobby</th><th>IP</th><th>Session</th><th>Total Online</th><th></th></tr></thead><tbody id="online-players-body">' + rows + '</tbody></table></div>';
         } else {
           tbody.innerHTML = rows;
         }
