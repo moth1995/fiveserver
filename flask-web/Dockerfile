@@ -1,15 +1,14 @@
-FROM python:3.12-slim
+FROM python:3.12-alpine AS builder
 
+RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
+COPY flask-web/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir --prefix=/install -r /tmp/requirements.txt
+
+FROM python:3.12-alpine
+
+COPY --from=builder /install /usr/local
 WORKDIR /app
-
-# Install Python dependencies
-COPY flask-web/requirements.txt /app/requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
 COPY flask-web/ /app/flask-web/
-
-# Copy config and keys (mounted at runtime or baked in for testing)
 COPY etc/ /app/etc/
 
 EXPOSE 80 443
