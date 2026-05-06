@@ -32,6 +32,7 @@ func NewLoginDispatcher(hub *Hub, sc *db.StorageController, version string) *Dis
 func registerLoginHandlers(d *Dispatcher, hub *Hub, sc *db.StorageController, version string) {
 	d.Register(0x3001, handleDo3001())
 	d.Register(0x3003, handleAuthenticate(hub, sc, version))
+	d.Register(0x3f01, handleAuthenticateWE9LE(hub, sc, version))
 	d.Register(0x3010, handleGetProfiles(hub, sc))
 	d.Register(0x3020, handleCreateProfile(hub, sc))
 	d.Register(0x3030, handleDeleteProfile(hub, sc))
@@ -57,19 +58,30 @@ func handleDo3001() HandlerFunc {
 	}
 }
 
-// ---- 0x3003 authenticate ----------------------------------------------------
+// ---- 0x3003 / 0x3f01 authenticate -------------------------------------------
+// Python: authenticate_3003 (PES5/WE9) responds with 0x3004.
+//         authenticate_3f01 (WE9LE)    responds with 0x3f02.
+// Both share identical logic — only the response packet ID differs.
 
 func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) HandlerFunc {
+	return doAuthenticate(hub, sc, version, 0x3004)
+}
+
+func handleAuthenticateWE9LE(hub *Hub, sc *db.StorageController, version string) HandlerFunc {
+	return doAuthenticate(hub, sc, version, 0x3f02)
+}
+
+func doAuthenticate(hub *Hub, sc *db.StorageController, version string, responseID uint16) HandlerFunc {
 	keyBytes, _ := hex.DecodeString(cipherKey)
 
 	return func(s *Session, pkt Packet) error {
-		logger.Debugf("[login] %s: 0x3003 authenticate — data len=%d", s.Conn.RemoteAddr, len(pkt.Data))
+		logger.Debugf("[login] %s: 0x%04x authenticate — data len=%d", s.Conn.RemoteAddr, responseID-1, len(pkt.Data))
 
 		// Decrypt the packet data with Blowfish ECB
 		decrypted, err := crypto.DecryptECB(keyBytes, pkt.Data)
 		if err != nil {
 			logger.Warnf("[login] %s: blowfish decrypt failed: %v", s.Conn.RemoteAddr, err)
-			return s.Conn.SendData(0x3004, pack32(0xffffff10))
+			return s.Conn.SendData(responseID, pack32(0xffffff10))
 		}
 
 		// Extract roster hash [48:64] from decrypted data
@@ -93,27 +105,27 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		u, err := db.GetUserByHash(ctx, sc, userHash)
 		if err != nil {
 			logger.Warnf("[login] %s: user not found (hash=%s): %v", s.Conn.RemoteAddr, userHash, err)
-			return s.Conn.SendData(0x3004, pack32(0xffffff10))
+			return s.Conn.SendData(responseID, pack32(0xffffff10))
 		}
 		logger.Debugf("[login] %s: user found id=%d", s.Conn.RemoteAddr, u.ID)
 
 		// Check already online by user hash — O(1), matches Python isUserOnline(usr).
 		if hub.IsUserOnline(u) {
 			logger.Infof("[login] %s: user id=%d already online", s.Conn.RemoteAddr, u.ID)
-			return s.Conn.SendData(0x3004, pack32(0xffffff11))
+			return s.Conn.SendData(responseID, pack32(0xffffff11))
 		}
 
 		// Roster hash check
 		if hub.Config().Roster.EnforceHash && hasNullBlock(clientRosterHash) {
 			logger.Infof("[login] %s: roster hash check failed", s.Conn.RemoteAddr)
-			return s.Conn.SendData(0x3004, pack32(0xffffff12))
+			return s.Conn.SendData(responseID, pack32(0xffffff12))
 		}
 
 		// Load profiles
 		profiles, err := db.GetProfilesByUserID(ctx, sc, u.ID)
 		if err != nil {
 			logger.Errorf("[login] %s: failed to load profiles for user id=%d: %v", s.Conn.RemoteAddr, u.ID, err)
-			return s.Conn.SendData(0x3004, pack32(0xffffff10))
+			return s.Conn.SendData(responseID, pack32(0xffffff10))
 		}
 		logger.Debugf("[login] %s: loaded %d profile(s) for user id=%d", s.Conn.RemoteAddr, len(profiles), u.ID)
 		// Place profiles into fixed 3-slot array by ordinal — mirrors Python getUser().
@@ -147,7 +159,7 @@ func handleAuthenticate(hub *Hub, sc *db.StorageController, version string) Hand
 		// (handles unclean drops where 0x0003 is never sent).
 		s.OnClose = func() { hub.UserOffline(s) }
 
-		return s.Conn.SendZeros(0x3004, 4)
+		return s.Conn.SendZeros(responseID, 4)
 	}
 }
 

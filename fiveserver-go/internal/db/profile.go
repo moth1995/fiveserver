@@ -231,3 +231,41 @@ func ComputeRanks(ctx context.Context, sc *StorageController) error {
 	}
 	return tx.Commit()
 }
+
+// PlayerSearchResult holds the minimal fields returned by FindPlayerByName.
+type PlayerSearchResult struct {
+	ID   int
+	Name string
+}
+
+// FindPlayerByName searches profiles by exact name (searchType=0) or prefix (searchType=1).
+// Mirrors Python ProfileData.findPlayerByName. Returns up to 50 results.
+func FindPlayerByName(ctx context.Context, sc *StorageController, name string, searchType int) ([]PlayerSearchResult, error) {
+	if sc == nil {
+		return nil, ErrNoDB
+	}
+	const q = `
+		SELECT id, name
+		FROM profiles
+		WHERE deleted = 0
+		  AND (
+		      (? = 0 AND name = ?)
+		   OR (? = 1 AND name LIKE CONCAT(?, '%'))
+		  )
+		ORDER BY name ASC, id ASC
+		LIMIT 50`
+	rows, err := sc.Read.DB().QueryContext(ctx, q, searchType, name, searchType, name)
+	if err != nil {
+		return nil, fmt.Errorf("db/profile: find player by name: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var results []PlayerSearchResult
+	for rows.Next() {
+		var r PlayerSearchResult
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, fmt.Errorf("db/profile: find player scan: %w", err)
+		}
+		results = append(results, r)
+	}
+	return results, rows.Err()
+}

@@ -33,12 +33,12 @@ func registerMenuHandlers(d *Dispatcher, hub *Hub, sc *db.StorageController) {
 	d.Register(0x4202, handleSelectLobby4202(hub, sc))
 	d.Register(0x4210, handleGetUserList4210(hub))
 	d.Register(0x4300, handleGetRoomList4300(hub))
-	d.Register(0x3080, handleDo3080())
+	d.Register(0x3080, handleDo3080(sc))
 	d.Register(0x4510, handleRemoveFriend4510(sc))
 	d.Register(0x4520, handleBlockProfile4520(sc))
 	d.Register(0x4522, handleUnblockProfile4522(sc))
 	d.Register(0x4580, handleGetFriends4580())
-	d.Register(0x4600, handleSearchPlayers4600())
+	d.Register(0x4600, handleSearchPlayers4600(sc))
 	d.Register(0x4700, handleSendMessage4700(sc))
 	d.Register(0x4780, handleGetMessages4780(sc))
 	d.Register(0x4790, handleDo4790())
@@ -287,12 +287,35 @@ func handleGetRoomList4300(hub *Hub) HandlerFunc {
 	}
 }
 
-// ---- 0x3080 stub -------------------------------------------------------------
+// ---- 0x3080 getFriendsAndBlocked --------------------------------------------
+// Python: getFriendsAndBlocked_3080 — sends friends (flag=0) and blocked (flag=1)
+// profiles in chunks of 25 via 0x3084, framed by 0x3082 / 0x3086.
+// Each entry: [4 profileId int32][1 flag][16 name null-padded] = 21 bytes.
 
-func handleDo3080() HandlerFunc {
+func handleDo3080(sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		if err := s.Conn.SendZeros(0x3082, 4); err != nil {
 			return err
+		}
+		if s.User == nil || s.User.Profile == nil {
+			return s.Conn.SendZeros(0x3086, 0)
+		}
+		entries, _ := db.GetFriendsAndBlockedForProfile(context.Background(), sc, s.User.Profile.ID)
+		for start := 0; start < len(entries); start += 25 {
+			end := start + 25
+			if end > len(entries) {
+				end = len(entries)
+			}
+			chunk := entries[start:end]
+			data := make([]byte, 0, len(chunk)*21)
+			for _, e := range chunk {
+				data = append(data, pack32i(int32(e.ProfileID))...)
+				data = append(data, e.Flag)
+				data = append(data, model.PadWithZeros(e.Name, 16)...)
+			}
+			if err := s.Conn.SendData(0x3084, data); err != nil {
+				return err
+			}
 		}
 		return s.Conn.SendZeros(0x3086, 0)
 	}
@@ -370,11 +393,37 @@ func handleDo4790() HandlerFunc {
 	}
 }
 
-// ---- 0x4580 getFriends -------------------------------------------------------
+// ---- 0x4580 getFriendsMatchState --------------------------------------------
+// Python: getFriendsMatchState_4580 — sends a signal to clean previous friends
+// data (0x4581), then an empty 0x4582, then a terminator (0x4583).
+//
+// data format extracted from decompiled code with ghidra,
+// match the whole logic this is for 2 friends entries
+// but for some reason the game doesnt read them at all
+//
+// from other packets, this is the room data sent:
+//   pack('!i', room.id)
+//   pack('!B', 1)
+//   pack('!B', int(room.usePassword))
+//   padWithZeros(room.name, 32)
+//   pack('!B', room.matchTime/5)
+//
+// entry layout (per friend):
+//   [4]  profileId int32
+//   [2]  unknown H
+//   [1]  unknown B
+//   [32] profileName
+//   [32] roomName
+//   [1]  unknown B
+//   [1]  unknown B
 
 func handleGetFriends4580() HandlerFunc {
 	return func(s *Session, pkt Packet) error {
+		// send a signal to clean the previous friends data
 		if err := s.Conn.SendZeros(0x4581, 4); err != nil {
+			return err
+		}
+		if err := s.Conn.SendZeros(0x4582, 0); err != nil {
 			return err
 		}
 		return s.Conn.SendZeros(0x4583, 4)
@@ -382,11 +431,56 @@ func handleGetFriends4580() HandlerFunc {
 }
 
 // ---- 0x4600 searchPlayers ---------------------------------------------------
+// Python: searchPlayers_4600 — exact (type 0) or prefix (type 1) name search.
+// Results sent in chunks of 10 via 0x4602, framed by 0x4601 / 0x4603.
 
-func handleSearchPlayers4600() HandlerFunc {
+func handleSearchPlayers4600(sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		if err := s.Conn.SendZeros(0x4601, 4); err != nil {
 			return err
+		}
+		if len(pkt.Data) < 17 {
+			return s.Conn.SendZeros(0x4603, 4)
+		}
+		searchType := int(pkt.Data[0])
+		name := string(model.StripZeros(pkt.Data[1:17]))
+
+		ctx := context.Background()
+		results, err := db.FindPlayerByName(ctx, sc, name, searchType)
+		if err != nil || len(results) == 0 {
+			return s.Conn.SendZeros(0x4603, 4)
+		}
+
+		// Send in chunks of 10 (mirrors Python chunkedBySize(results, 10))
+		// Entry layout (89 bytes each):
+		//   [4]  profileId int32 big-endian
+		//   [16] profileName null-padded
+		//   [2]  unknown = 0
+		//   [32] roomName1 = zeros
+		//   [1]  roomId1 = 0
+		//   [32] roomName2 = zeros
+		//   [1]  roomId2 = 0
+		//   [1]  padding = 0
+		for start := 0; start < len(results); start += 10 {
+			end := start + 10
+			if end > len(results) {
+				end = len(results)
+			}
+			chunk := results[start:end]
+			data := make([]byte, 0, len(chunk)*89)
+			for _, r := range chunk {
+				data = append(data, pack32i(int32(r.ID))...)
+				data = append(data, model.PadWithZeros(r.Name, 16)...)
+				data = append(data, 0, 0)                          // unknown uint16
+				data = append(data, model.PadWithZeros("", 32)...) // roomName1
+				data = append(data, 0)                             // roomId1
+				data = append(data, model.PadWithZeros("", 32)...) // roomName2
+				data = append(data, 0)                             // roomId2
+				data = append(data, 0)                             // padding
+			}
+			if err := s.Conn.SendData(0x4602, data); err != nil {
+				return err
+			}
 		}
 		return s.Conn.SendZeros(0x4603, 4)
 	}

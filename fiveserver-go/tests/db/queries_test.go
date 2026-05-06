@@ -122,3 +122,20 @@ func TestErrNotFound_IsExported(t *testing.T) {
 		t.Fatal("ErrNotFound must not be nil")
 	}
 }
+
+// --- FindPlayerByName ---
+
+func TestFindPlayerByName_NilSC_ReturnsErrNoDB(t *testing.T) {
+	_, err := db.FindPlayerByName(context.Background(), nil, "Ronaldo", 0)
+	if err != db.ErrNoDB {
+		t.Fatalf("expected ErrNoDB, got %v", err)
+	}
+}
+
+func TestFindPlayerByName_NoServer_ReturnsError(t *testing.T) {
+	sc := newSC(t)
+	_, err := db.FindPlayerByName(context.Background(), sc, "Ronaldo", 0)
+	if err == nil {
+		t.Fatal("expected error when no server available")
+	}
+}
