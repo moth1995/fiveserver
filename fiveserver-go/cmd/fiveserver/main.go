@@ -115,7 +115,7 @@ func main() {
 		go func() {
 			defer wg.Done()
 			logger.Infof("listening on %s", addr)
-			if err := server.Serve(addr, d, ctx.Done(), cfg.Debug, filter...); err != nil {
+			if err := server.Serve(addr, d, ctx.Done(), func() bool { return cfg.Debug }, filter...); err != nil {
 				logger.Errorf("server %s: %v", addr, err)
 			}
 		}()
