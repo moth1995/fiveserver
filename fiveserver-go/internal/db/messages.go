@@ -61,7 +61,7 @@ func scanMessageEntries(rows *sql.Rows, queryErr error, bitfield uint32) ([]*Mes
 	if queryErr != nil {
 		return nil, fmt.Errorf("db/messages: query: %w", queryErr)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []*MessageEntry
 	for rows.Next() {
 		var e MessageEntry
