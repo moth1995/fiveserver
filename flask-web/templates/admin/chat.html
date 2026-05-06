@@ -10,12 +10,22 @@
     {% if success %}<div class="alert alert-ok">{{ success }}</div>{% endif %}
     <form method="POST" action="/admin/chat">
       <div class="form-row">
-        <label>Lobby <span class="hint">(leave blank to broadcast to all)</span></label>
-        <input type="text" name="lobby" placeholder="e.g. Russia" value="{{ request.form.get('lobby', lobby_filter) }}">
+        <label>Lobby</label>
+        <select name="lobby">
+          <option value="">— All lobbies (broadcast) —</option>
+          {% for name in lobby_names %}
+          <option value="{{ name }}" {% if request.form.get('lobby') == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-row">
+        <label>From</label>
+        <input type="text" name="from" value="{{ from_name }}" placeholder="admin" maxlength="32">
       </div>
       <div class="form-row">
         <label>Message</label>
-        <input type="text" name="message" placeholder="Message text" maxlength="126" required autofocus>
+        <input type="text" name="message" placeholder="Message text" maxlength="126" required autofocus
+               value="{{ request.form.get('message', '') }}">
       </div>
       <button type="submit" class="btn">Send</button>
     </form>
@@ -25,8 +35,12 @@
     <div class="chat-history-header">
       <h2>Chat History</h2>
       <form method="GET" action="/admin/chat" class="lobby-filter-form">
-        <input type="text" name="lobby" placeholder="Filter by lobby" value="{{ lobby_filter }}">
-        <button type="submit" class="btn btn-sm">Filter</button>
+        <select name="lobby" onchange="this.form.submit()">
+          <option value="">— All lobbies —</option>
+          {% for name in lobby_names %}
+          <option value="{{ name }}" {% if lobby_filter == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
         {% if lobby_filter %}
         <a href="/admin/chat" class="btn btn-sm btn-ghost">Clear</a>
         {% endif %}
@@ -45,7 +59,7 @@
       {% else %}
       <table class="chat-table">
         <thead><tr><th>Time</th><th>From</th><th>Message</th></tr></thead>
-        <tbody id="chat-body-{{ lb.name }}">
+        <tbody id="chat-body-{{ lb.name | urlencode }}">
           {% for msg in lb.messages | reverse %}
           <tr class="{{ 'system-row' if msg.from == 'SYSTEM' else '' }}">
             <td class="chat-ts">{{ msg.timestamp[:19] | replace('T', ' ') }}</td>
@@ -71,7 +85,7 @@ function refreshChat() {
   var url = '/admin/api/chat' + (_lobbyFilter ? '?lobby=' + encodeURIComponent(_lobbyFilter) : '');
   fetch(url).then(function(r) { return r.json(); }).then(function(data) {
     (data.lobbies || []).forEach(function(lb) {
-      var tbody = document.getElementById('chat-body-' + lb.name);
+      var tbody = document.getElementById('chat-body-' + encodeURIComponent(lb.name));
       if (!tbody) return;
       tbody.innerHTML = (lb.messages || []).slice().reverse().map(function(m) {
         var cls = m.from === 'SYSTEM' ? ' class="system-row"' : '';

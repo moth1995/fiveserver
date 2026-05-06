@@ -86,8 +86,8 @@
     </td>
     <td style="text-align:center;">{% if lb.show_matches %}&#10003;{% else %}&#10007;{% endif %}</td>
     <td style="text-align:center;">{% if lb.check_roster_hash %}&#10003;{% else %}&#10007;{% endif %}</td>
-    <td style="text-align:center;" class="lobby-players" data-lobby="{{ lb.name }}">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
-    <td style="text-align:center;" class="lobby-matches" data-lobby="{{ lb.name }}" data-show="{{ 'true' if lb.show_matches else 'false' }}">
+    <td style="text-align:center;" class="lobby-players" data-lobby-idx="{{ loop.index0 }}">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
+    <td style="text-align:center;" class="lobby-matches" data-lobby-idx="{{ loop.index0 }}" data-show="{{ 'true' if lb.show_matches else 'false' }}">
       {% if lb.show_matches and matches %}
       <button class="btn btn-secondary btn-sm"
               data-matches='{{ matches | tojson }}'
@@ -223,7 +223,7 @@ function fmtDuration(s) {
 function refreshStats() {
   fetch('/admin/api/lobby-stats').then(function(r) { return r.json(); }).then(function(data) {
     var users = data.users || [];
-    var lobbyStats = data.lobby_stats || {};
+    var lobbyStats = data.lobby_stats || [];
 
     // Online count card
     var countEl = document.getElementById('online-count');
@@ -247,19 +247,21 @@ function refreshStats() {
       }
     }
 
-    // Lobby player counts and match buttons
+    // Lobby player counts and match buttons — matched by index (order from Go YAML)
+    var lobbyList = Array.isArray(lobbyStats) ? lobbyStats : [];
     document.querySelectorAll('.lobby-players').forEach(function(cell) {
-      var name = cell.dataset.lobby;
-      var stats = lobbyStats[name] || {};
+      var idx = parseInt(cell.dataset.lobbyIdx, 10);
+      var stats = lobbyList[idx] || {};
       cell.textContent = stats.player_count !== undefined ? stats.player_count : '0';
     });
     document.querySelectorAll('.lobby-matches').forEach(function(cell) {
-      var name = cell.dataset.lobby;
+      var idx = parseInt(cell.dataset.lobbyIdx, 10);
       var show = cell.dataset.show === 'true';
-      var stats = lobbyStats[name] || {};
+      var stats = lobbyList[idx] || {};
       var matches = stats.matches || [];
+      var lobbyName = stats.name || '';
       if (show && matches.length > 0) {
-        cell.innerHTML = '<button class="btn btn-secondary btn-sm" data-matches=\'' + JSON.stringify(matches) + '\' data-lobby="' + name + '" onclick="openMatches(this)">' + matches.length + ' match' + (matches.length !== 1 ? 'es' : '') + '</button>';
+        cell.innerHTML = '<button class="btn btn-secondary btn-sm" data-matches=\'' + JSON.stringify(matches) + '\' data-lobby="' + lobbyName + '" onclick="openMatches(this)">' + matches.length + ' match' + (matches.length !== 1 ? 'es' : '') + '</button>';
       } else {
         cell.innerHTML = '<span style="color:#94a3b8;">—</span>';
       }
