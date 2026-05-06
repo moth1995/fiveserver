@@ -5,3 +5,4 @@ etc/data/*.yaml
 .claude/
 .venv
 .env
+.vscode/
