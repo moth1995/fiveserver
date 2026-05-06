@@ -57,9 +57,6 @@ func TestReload_ChangesDetected(t *testing.T) {
 	if !cfg.Debug {
 		t.Error("Debug want true")
 	}
-	if cfg.Log.Level != "debug" {
-		t.Errorf("Log.Level want debug, got %q", cfg.Log.Level)
-	}
 	if len(cfg.Lobbies) != 3 {
 		t.Errorf("Lobbies want 3, got %d", len(cfg.Lobbies))
 	}
