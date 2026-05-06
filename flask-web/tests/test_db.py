@@ -161,16 +161,20 @@ class TestRecordUserRegistration(unittest.TestCase):
 
 class TestStatsMatchesPerDay(unittest.TestCase):
     def test_fills_zero_days(self) -> None:
-        conn = _make_conn(fetchall_val=[{"day": 15, "count": 3}])
-        result = db.stats_matches_per_day(conn, 2026, 4)
+        from datetime import date
+
+        conn = _make_conn(fetchall_val=[{"d": date(2026, 4, 15), "count": 3}])
+        result = db.stats_matches_per_day(conn, date(2026, 4, 1), date(2026, 4, 30))
         self.assertEqual(len(result), 30)  # April has 30 days
-        self.assertEqual(result[14]["day"], 15)
+        self.assertEqual(result[14]["date"], "2026-04-15")
         self.assertEqual(result[14]["count"], 3)
         self.assertEqual(result[0]["count"], 0)
 
     def test_empty_month_all_zeros(self) -> None:
+        from datetime import date
+
         conn = _make_conn(fetchall_val=[])
-        result = db.stats_matches_per_day(conn, 2026, 2)
+        result = db.stats_matches_per_day(conn, date(2026, 2, 1), date(2026, 2, 28))
         self.assertTrue(all(d["count"] == 0 for d in result))
         self.assertEqual(len(result), 28)
 
