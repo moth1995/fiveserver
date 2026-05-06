@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import date, timedelta
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from helpers import create_test_app
