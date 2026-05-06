@@ -24,6 +24,10 @@ jobs:
         with:
           go-version: "1.23"
           cache: true
+          cache-dependency-path: fiveserver-go/go.sum
+
+      - name: Download modules
+        run: go mod download
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
