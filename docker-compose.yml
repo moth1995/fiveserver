@@ -69,6 +69,7 @@ services:
       DB_USER: ${DB_USER}
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-fiveserver}
+      GO_API_HOST: fiveserver
     volumes:
       - ./etc/conf/fiveserver.yaml:/app/etc/conf/fiveserver.yaml
       - ./etc/conf/admin.yaml:/app/etc/conf/admin.yaml
