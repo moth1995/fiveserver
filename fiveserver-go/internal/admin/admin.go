@@ -231,6 +231,7 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 	} else {
 		logger.SetLevel("info")
 	}
+	srv.hub.SyncLobbiesFromConfig()
 	logger.Infof("[admin] config reloaded: %d change(s)", len(changes))
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{

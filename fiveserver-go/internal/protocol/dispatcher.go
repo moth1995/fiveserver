@@ -149,6 +149,34 @@ func NewHub(cfg *config.Config) *Hub {
 // Lobbies returns the live lobby slice (read-only after startup).
 func (h *Hub) Lobbies() []*model.Lobby { return h.lobbies }
 
+// SyncLobbiesFromConfig propagates a live config reload into the in-memory lobby
+// slice. Existing lobbies are updated in-place (players/rooms untouched); new
+// entries in cfg.Lobbies are appended.
+func (h *Hub) SyncLobbiesFromConfig() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	cfgLobbies := h.cfg.Lobbies
+	for i, lc := range cfgLobbies {
+		if i < len(h.lobbies) {
+			l := h.lobbies[i]
+			l.Name = lc.Name
+			l.TypeCode = lc.TypeCode
+			l.TypeStr = lc.Type
+			l.ShowMatches = lc.ShowMatches
+			l.CheckRosterHash = lc.CheckRosterHash
+			l.MaxPlayers = h.cfg.MaxUsers
+		} else {
+			l := model.NewLobby(lc.Name, h.cfg.MaxUsers)
+			l.Index = i
+			l.TypeCode = lc.TypeCode
+			l.TypeStr = lc.Type
+			l.ShowMatches = lc.ShowMatches
+			l.CheckRosterHash = lc.CheckRosterHash
+			h.lobbies = append(h.lobbies, l)
+		}
+	}
+}
+
 // GetLobby returns the lobby at the given index, or false if out of range.
 func (h *Hub) GetLobby(index int) (*model.Lobby, bool) {
 	if index < 0 || index >= len(h.lobbies) {
