@@ -19,7 +19,7 @@ func newSC(t *testing.T) *db.StorageController {
 	if err != nil {
 		t.Fatalf("NewStorageController: %v", err)
 	}
-	t.Cleanup(func() { sc.Close() })
+	t.Cleanup(func() { _ = sc.Close() })
 	return sc
 }
 
