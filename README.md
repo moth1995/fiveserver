@@ -1,5 +1,8 @@
 # Fiveserver
 
+[![CI](https://github.com/moth1995/fiveserver/actions/workflows/ci.yml/badge.svg?branch=feature%2Fgo%2Bflask-migration)](https://github.com/moth1995/fiveserver/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/moth1995/fiveserver/branch/feature%2Fgo%2Bflask-migration/graph/badge.svg)](https://codecov.io/gh/moth1995/fiveserver)
+
 Reverse-engineered online multiplayer server for **PES5 / WE9 / WE9LE** and **PES6 / WE2007** (via "sixserver"). Speaks a custom binary TCP protocol over XOR-encrypted streams, backed by MySQL.
 
 Copyright (C) 2011–2021 juce and reddwarf — BSD-style license.
