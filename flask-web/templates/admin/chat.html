@@ -1,0 +1,87 @@
+{% extends "admin/layout.html" %}
+{% block title %}Chat{% endblock %}
+{% block body %}
+
+<div class="chat-page">
+
+  <section class="chat-send card">
+    <h2>Send Message</h2>
+    {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+    {% if success %}<div class="alert alert-ok">{{ success }}</div>{% endif %}
+    <form method="POST" action="/admin/chat">
+      <div class="form-row">
+        <label>Lobby <span class="hint">(leave blank to broadcast to all)</span></label>
+        <input type="text" name="lobby" placeholder="e.g. Russia" value="{{ request.form.get('lobby', lobby_filter) }}">
+      </div>
+      <div class="form-row">
+        <label>Message</label>
+        <input type="text" name="message" placeholder="Message text" maxlength="126" required autofocus>
+      </div>
+      <button type="submit" class="btn">Send</button>
+    </form>
+  </section>
+
+  <section class="chat-history card">
+    <div class="chat-history-header">
+      <h2>Chat History</h2>
+      <form method="GET" action="/admin/chat" class="lobby-filter-form">
+        <input type="text" name="lobby" placeholder="Filter by lobby" value="{{ lobby_filter }}">
+        <button type="submit" class="btn btn-sm">Filter</button>
+        {% if lobby_filter %}
+        <a href="/admin/chat" class="btn btn-sm btn-ghost">Clear</a>
+        {% endif %}
+      </form>
+    </div>
+
+    {% if not lobbies_chat %}
+      <p class="empty">No chat history available — Go server may be offline.</p>
+    {% endif %}
+
+    {% for lb in lobbies_chat %}
+    <div class="lobby-chat-block">
+      <h3 class="lobby-label">{{ lb.name }}</h3>
+      {% if not lb.messages %}
+        <p class="empty">No messages in this lobby.</p>
+      {% else %}
+      <table class="chat-table">
+        <thead><tr><th>Time</th><th>From</th><th>Message</th></tr></thead>
+        <tbody id="chat-body-{{ lb.name }}">
+          {% for msg in lb.messages | reverse %}
+          <tr class="{{ 'system-row' if msg.from == 'SYSTEM' else '' }}">
+            <td class="chat-ts">{{ msg.timestamp[:19] | replace('T', ' ') }}</td>
+            <td class="chat-from">{{ msg.from }}</td>
+            <td class="chat-text">{{ msg.text }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+
+</div>
+
+<script>
+var _lobbyFilter = {{ lobby_filter | tojson }};
+
+function fmtTs(ts) { return (ts || '').slice(0, 19).replace('T', ' '); }
+
+function refreshChat() {
+  var url = '/admin/api/chat' + (_lobbyFilter ? '?lobby=' + encodeURIComponent(_lobbyFilter) : '');
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    (data.lobbies || []).forEach(function(lb) {
+      var tbody = document.getElementById('chat-body-' + lb.name);
+      if (!tbody) return;
+      tbody.innerHTML = (lb.messages || []).slice().reverse().map(function(m) {
+        var cls = m.from === 'SYSTEM' ? ' class="system-row"' : '';
+        return '<tr' + cls + '><td class="chat-ts">' + fmtTs(m.timestamp) + '</td><td class="chat-from">' + (m.from || '') + '</td><td class="chat-text">' + m.text + '</td></tr>';
+      }).join('');
+    });
+  }).catch(function() {});
+}
+
+setInterval(refreshChat, 10000);
+</script>
+
+{% endblock %}

@@ -7,7 +7,7 @@
     <div class="card-label">Registered Users</div>
   </div>
   <div class="card">
-    <div class="card-value">{{ online_users | length }}</div>
+    <div class="card-value" id="online-count">{{ online_users | length }}</div>
     <div class="card-label">Online Now</div>
   </div>
   <div class="card">
@@ -17,11 +17,12 @@
 </div>
 
 <h2>Online Players</h2>
+<div id="online-players-wrap">
 {% if online_users %}
 <div class="table-wrap">
 <table>
   <thead><tr><th>Username</th><th>Lobby</th><th>Connected Since</th></tr></thead>
-  <tbody>
+  <tbody id="online-players-body">
   {% for u in online_users %}
   <tr><td>{{ u.username }}</td><td>{{ u.lobby }}</td><td>{{ u.online_seconds | format_duration }}</td></tr>
   {% endfor %}
@@ -29,8 +30,9 @@
 </table>
 </div>
 {% else %}
-<p style="color:#64748b;">No players currently online.</p>
+<p id="online-empty" style="color:#64748b;">No players currently online.</p>
 {% endif %}
+</div>
 
 {# ------------------------------------------------------------------ #}
 <div style="display:flex;align-items:center;gap:12px;margin-top:32px;margin-bottom:12px;">
@@ -78,8 +80,8 @@
     </td>
     <td style="text-align:center;">{% if lb.show_matches %}&#10003;{% else %}&#10007;{% endif %}</td>
     <td style="text-align:center;">{% if lb.check_roster_hash %}&#10003;{% else %}&#10007;{% endif %}</td>
-    <td style="text-align:center;">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
-    <td style="text-align:center;">
+    <td style="text-align:center;" class="lobby-players" data-lobby="{{ lb.name }}">{{ stats.get('player_count', lobby_players.get(lb.name, 0)) }}</td>
+    <td style="text-align:center;" class="lobby-matches" data-lobby="{{ lb.name }}" data-show="{{ 'true' if lb.show_matches else 'false' }}">
       {% if lb.show_matches and matches %}
       <button class="btn btn-secondary btn-sm"
               data-matches='{{ matches | tojson }}'
@@ -202,5 +204,64 @@ document.addEventListener('keydown', function(e) {
   </div>
 </form>
 {% endif %}
+
+<script>
+function fmtDuration(s) {
+  s = parseInt(s) || 0;
+  var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (h) return h + 'h ' + m + 'm ' + sec + 's';
+  if (m) return m + 'm ' + sec + 's';
+  return sec + 's';
+}
+
+function refreshStats() {
+  fetch('/admin/api/lobby-stats').then(function(r) { return r.json(); }).then(function(data) {
+    var users = data.users || [];
+    var lobbyStats = data.lobby_stats || {};
+
+    // Online count card
+    var countEl = document.getElementById('online-count');
+    if (countEl) countEl.textContent = users.length;
+
+    // Online players table
+    var tbody = document.getElementById('online-players-body');
+    var wrap  = document.getElementById('online-players-wrap');
+    if (wrap) {
+      if (users.length === 0) {
+        wrap.innerHTML = '<p id="online-empty" style="color:#64748b;">No players currently online.</p>';
+      } else {
+        var rows = users.map(function(u) {
+          return '<tr><td>' + (u.username||'') + '</td><td>' + (u.lobby||'') + '</td><td>' + fmtDuration(u.online_seconds) + '</td></tr>';
+        }).join('');
+        if (!tbody) {
+          wrap.innerHTML = '<div class="table-wrap"><table><thead><tr><th>Username</th><th>Lobby</th><th>Connected Since</th></tr></thead><tbody id="online-players-body">' + rows + '</tbody></table></div>';
+        } else {
+          tbody.innerHTML = rows;
+        }
+      }
+    }
+
+    // Lobby player counts and match buttons
+    document.querySelectorAll('.lobby-players').forEach(function(cell) {
+      var name = cell.dataset.lobby;
+      var stats = lobbyStats[name] || {};
+      cell.textContent = stats.player_count !== undefined ? stats.player_count : '0';
+    });
+    document.querySelectorAll('.lobby-matches').forEach(function(cell) {
+      var name = cell.dataset.lobby;
+      var show = cell.dataset.show === 'true';
+      var stats = lobbyStats[name] || {};
+      var matches = stats.matches || [];
+      if (show && matches.length > 0) {
+        cell.innerHTML = '<button class="btn btn-secondary btn-sm" data-matches=\'' + JSON.stringify(matches) + '\' data-lobby="' + name + '" onclick="openMatches(this)">' + matches.length + ' match' + (matches.length !== 1 ? 'es' : '') + '</button>';
+      } else {
+        cell.innerHTML = '<span style="color:#94a3b8;">—</span>';
+      }
+    });
+  }).catch(function() {});
+}
+
+setInterval(refreshStats, 15000);
+</script>
 
 {% endblock %}
