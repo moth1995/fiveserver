@@ -454,6 +454,10 @@ func (c *Config) Reload(filePath string) ([]string, error) {
 		changes = append(changes, fmt.Sprintf("BannedList reload error: %v", loadErr))
 	}
 	c.NewFeatures = fresh.NewFeatures
+	if c.ComputeRanksInterval != fresh.ComputeRanksInterval {
+		changes = append(changes, fmt.Sprintf("ComputeRanksInterval: %v -> %v", c.ComputeRanksInterval, fresh.ComputeRanksInterval))
+		c.ComputeRanksInterval = fresh.ComputeRanksInterval
+	}
 
 	return changes, nil
 }

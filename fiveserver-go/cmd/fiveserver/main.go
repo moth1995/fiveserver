@@ -178,18 +178,23 @@ func main() {
 // ComputeRanksInterval from fiveserver.yaml (mirrors Python computeRanks timer).
 // Interval = days*86400 + seconds. Falls back to 24 h if both are zero.
 func startRanksTimer(sc *db.StorageController, cfg *config.Config) {
-	interval := time.Duration(cfg.ComputeRanksInterval.Days)*24*time.Hour +
-		time.Duration(cfg.ComputeRanksInterval.Seconds)*time.Second
-	if interval <= 0 {
-		interval = 24 * time.Hour
-	}
 	var tick func()
 	tick = func() {
+		ri := cfg.ComputeRanksInterval
+		interval := time.Duration(ri.Days)*24*time.Hour + time.Duration(ri.Seconds)*time.Second
+		if interval <= 0 {
+			interval = 24 * time.Hour
+		}
 		logger.Infof("[ranks] recomputing ranks (interval=%s)", interval)
 		if err := db.ComputeRanks(context.Background(), sc); err != nil {
 			logger.Errorf("[ranks] ComputeRanks failed: %v", err)
 		}
 		time.AfterFunc(interval, tick)
 	}
-	time.AfterFunc(interval, tick)
+	ri := cfg.ComputeRanksInterval
+	initial := time.Duration(ri.Days)*24*time.Hour + time.Duration(ri.Seconds)*time.Second
+	if initial <= 0 {
+		initial = 24 * time.Hour
+	}
+	time.AfterFunc(initial, tick)
 }
