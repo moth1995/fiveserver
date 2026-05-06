@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import os
 import unittest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))

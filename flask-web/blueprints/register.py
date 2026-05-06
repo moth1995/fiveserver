@@ -1,8 +1,6 @@
 """Registration blueprint: user sign-up and password-recovery flow."""
 from __future__ import annotations
 
-import random
-import string
 from typing import Any
 
 from flask import (

@@ -11,8 +11,6 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from db import (
     browse_profiles,
     browse_users,
@@ -38,6 +36,8 @@ from flask import (
     session,
     url_for,
 )
+
+logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -405,7 +405,7 @@ def _read_log_lines(selected: str, n_lines: int) -> list[str]:
     try:
         with open(log_file, encoding="utf-8", errors="replace") as f:
             all_lines = f.readlines()
-        return [l.rstrip("\n") for l in all_lines[-n_lines:]]
+        return [line.rstrip("\n") for line in all_lines[-n_lines:]]
     except OSError:
         return ["(log file not found or unreadable)"]
 
