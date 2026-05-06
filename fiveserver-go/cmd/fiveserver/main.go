@@ -97,7 +97,7 @@ func main() {
 	if adminCfg.AdminPort != 0 {
 		adminAddr := fmt.Sprintf("%s:%d", listenOn, adminCfg.AdminPort)
 		go func() {
-			adminSrv := admin.NewServer(hub, cfg, *configPath)
+			adminSrv := admin.NewServer(hub, cfg, adminCfg, *configPath)
 			if err := adminSrv.ListenAndServe(adminAddr); err != nil {
 				logger.Errorf("admin: %v", err)
 			}
