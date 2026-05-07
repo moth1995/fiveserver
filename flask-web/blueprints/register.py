@@ -29,7 +29,6 @@ from db import (
 register_bp = Blueprint("register", __name__)
 
 
-
 def _captcha_template_vars() -> dict[str, str]:
     return _captcha.template_vars(
         current_app.config.get("CAPTCHA_PROVIDER", ""),
