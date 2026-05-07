@@ -33,7 +33,11 @@ def _captcha_template_vars() -> dict[str, str]:
     provider_name: str = current_app.config.get("CAPTCHA_PROVIDER", "")
     provider = _captcha.get_provider(provider_name)
     if provider is None:
-        return {"captcha_script_url": "", "captcha_widget_class": "", "captcha_site_key": ""}
+        return {
+            "captcha_script_url": "",
+            "captcha_widget_class": "",
+            "captcha_site_key": "",
+        }
     return {
         "captcha_script_url": provider.script_url,
         "captcha_widget_class": provider.widget_class,
@@ -43,7 +47,13 @@ def _captcha_template_vars() -> dict[str, str]:
 
 @register_bp.route("/")
 def form() -> str:
-    return render_template("register/form.html", serial="", username="", nonce="", **_captcha_template_vars())
+    return render_template(
+        "register/form.html",
+        serial="",
+        username="",
+        nonce="",
+        **_captcha_template_vars(),
+    )
 
 
 @register_bp.route("/md5.js")
@@ -80,11 +90,14 @@ def register():  # type: ignore[return]
         provider = _captcha.get_provider(provider_name)
         token: str = request.form.get(provider.token_field, "") if provider else ""
         if not _captcha.verify(token, secret_key, provider_name):
-            return render_template(
-                "register/result.html",
-                message="ERROR: CAPTCHA verification failed",
-                success=False,
-            ), 400
+            return (
+                render_template(
+                    "register/result.html",
+                    message="ERROR: CAPTCHA verification failed",
+                    success=False,
+                ),
+                400,
+            )
 
     serial: str = request.form.get("serial", "")
     username: str = request.form.get("user", "")
@@ -100,11 +113,14 @@ def register():  # type: ignore[return]
         # New registration
         existing = find_user_by_username(conn, username)
         if existing is not None:
-            return render_template(
-                "register/result.html",
-                message="ERROR: username is already taken",
-                success=False,
-            ), 409
+            return (
+                render_template(
+                    "register/result.html",
+                    message="ERROR: username is already taken",
+                    success=False,
+                ),
+                409,
+            )
         new_id: int = create_user(conn, username, serial, encrypted_hash)
         create_profiles_for_user(conn, new_id)
         record_user_registration(conn, new_id)
@@ -117,11 +133,14 @@ def register():  # type: ignore[return]
         # Password / serial modification via nonce
         user: dict[str, Any] | None = find_user_by_nonce(conn, nonce)
         if user is None:
-            return render_template(
-                "register/result.html",
-                message="ERROR: invalid or expired recovery link",
-                success=False,
-            ), 404
+            return (
+                render_template(
+                    "register/result.html",
+                    message="ERROR: invalid or expired recovery link",
+                    success=False,
+                ),
+                404,
+            )
         update_user(conn, user["id"], username, serial, encrypted_hash)
         return render_template(
             "register/result.html",

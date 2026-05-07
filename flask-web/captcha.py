@@ -18,11 +18,12 @@ import requests as _requests
 # Provider registry
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class _Provider:
     script_url: str
-    widget_class: str   # CSS class on the container div
-    token_field: str    # POST field name submitted by the widget
+    widget_class: str  # CSS class on the container div
+    token_field: str  # POST field name submitted by the widget
     verify_url: str
 
 
@@ -56,6 +57,7 @@ def get_provider(name: str) -> _Provider | None:
 # ---------------------------------------------------------------------------
 # Server-side verification
 # ---------------------------------------------------------------------------
+
 
 def verify(token: str, secret: str, provider_name: str) -> bool:
     """Verify *token* against the named provider. Returns False on any error."""
