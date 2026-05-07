@@ -76,7 +76,9 @@ def login():
         if provider_name and current_app.config.get("CAPTCHA_SECRET_KEY", ""):
             provider = _captcha.get_provider(provider_name)
             token: str = request.form.get(provider.token_field, "") if provider else ""
-            if not _captcha.verify(token, current_app.config["CAPTCHA_SECRET_KEY"], provider_name):
+            if not _captcha.verify(
+                token, current_app.config["CAPTCHA_SECRET_KEY"], provider_name
+            ):
                 error = "CAPTCHA verification failed."
         if error is None:
             username = request.form.get("username", "")

@@ -58,7 +58,11 @@ def template_vars(provider_name: str, site_key: str) -> dict[str, str]:
     """Return template context dict for rendering the CAPTCHA widget."""
     provider = get_provider(provider_name)
     if provider is None or not site_key:
-        return {"captcha_script_url": "", "captcha_widget_class": "", "captcha_site_key": ""}
+        return {
+            "captcha_script_url": "",
+            "captcha_widget_class": "",
+            "captcha_site_key": "",
+        }
     return {
         "captcha_script_url": provider.script_url,
         "captcha_widget_class": provider.widget_class,
