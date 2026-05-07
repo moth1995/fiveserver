@@ -1,5 +1,10 @@
 {% extends "base.html" %}
-{% block head %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="/static/admin.css">
+{% if captcha_site_key %}
+<script src="{{ captcha_script_url }}" async defer></script>
+{% endif %}
+{% endblock %}
 {% block title %}Admin Login — Fiveserver{% endblock %}
 {% block content %}
 <div class="login-wrap">
@@ -13,6 +18,9 @@
       <input id="username" name="username" type="text" autofocus autocomplete="username" required />
       <label for="password">Password</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required />
+      {% if captcha_site_key %}
+      <div class="{{ captcha_widget_class }}" data-sitekey="{{ captcha_site_key }}" style="margin-top:16px;"></div>
+      {% endif %}
       <button type="submit">Sign in</button>
     </form>
   </div>
