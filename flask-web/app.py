@@ -77,6 +77,12 @@ def create_app(
     _default_secret = cfg.get("FlaskSecretKey", secrets.token_hex(32))
     app.secret_key = os.environ.get("FLASK_SECRET", _default_secret)
 
+    # CAPTCHA — provider + keys loaded from environment; disabled when CAPTCHA_PROVIDER is unset
+    # Supported providers: google, cloudflare, hcaptcha
+    app.config["CAPTCHA_PROVIDER"] = os.environ.get("CAPTCHA_PROVIDER", "")
+    app.config["CAPTCHA_SITE_KEY"] = os.environ.get("CAPTCHA_SITE_KEY", "")
+    app.config["CAPTCHA_SECRET_KEY"] = os.environ.get("CAPTCHA_SECRET_KEY", "")
+
     # ------------------------------------------------------------------
     # Template filters
     # ------------------------------------------------------------------

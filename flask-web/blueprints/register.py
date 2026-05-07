@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import captcha as _captcha
 from flask import (
     Blueprint,
     abort,
@@ -28,14 +29,27 @@ from db import (
 register_bp = Blueprint("register", __name__)
 
 
+def _captcha_template_vars() -> dict[str, str]:
+    provider_name: str = current_app.config.get("CAPTCHA_PROVIDER", "")
+    provider = _captcha.get_provider(provider_name)
+    if provider is None:
+        return {"captcha_script_url": "", "captcha_widget_class": "", "captcha_site_key": ""}
+    return {
+        "captcha_script_url": provider.script_url,
+        "captcha_widget_class": provider.widget_class,
+        "captcha_site_key": current_app.config.get("CAPTCHA_SITE_KEY", ""),
+    }
+
+
 @register_bp.route("/")
 def form() -> str:
-    return render_template("register/form.html", serial="", username="", nonce="")
+    return render_template("register/form.html", serial="", username="", nonce="", **_captcha_template_vars())
 
 
 @register_bp.route("/md5.js")
 def md5_js():  # type: ignore[return]
-    return send_from_directory(current_app.static_folder, "md5.js")
+    static_folder: str = current_app.static_folder or ""
+    return send_from_directory(static_folder, "md5.js")
 
 
 @register_bp.route("/modifyUser/<nonce>")
@@ -49,6 +63,7 @@ def modify_user(nonce: str) -> str:
         serial=user["serial"],
         username=user["username"],
         nonce=nonce,
+        **_captcha_template_vars(),
     )
 
 
@@ -58,6 +73,18 @@ def register():  # type: ignore[return]
     banned_list = current_app.config.get("BANNED_LIST", [])
     if is_banned(remote_ip, banned_list):
         abort(403)
+
+    provider_name: str = current_app.config.get("CAPTCHA_PROVIDER", "")
+    secret_key: str = current_app.config.get("CAPTCHA_SECRET_KEY", "")
+    if provider_name and secret_key:
+        provider = _captcha.get_provider(provider_name)
+        token: str = request.form.get(provider.token_field, "") if provider else ""
+        if not _captcha.verify(token, secret_key, provider_name):
+            return render_template(
+                "register/result.html",
+                message="ERROR: CAPTCHA verification failed",
+                success=False,
+            ), 400
 
     serial: str = request.form.get("serial", "")
     username: str = request.form.get("user", "")
