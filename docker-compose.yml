@@ -71,6 +71,9 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_NAME: ${DB_NAME:-fiveserver}
       GO_API_HOST: fiveserver
+      CAPTCHA_PROVIDER: ${CAPTCHA_PROVIDER:-}
+      CAPTCHA_SITE_KEY: ${CAPTCHA_SITE_KEY:-}
+      CAPTCHA_SECRET_KEY: ${CAPTCHA_SECRET_KEY:-}
     volumes:
       - ./etc/conf/fiveserver.yaml:/app/etc/conf/fiveserver.yaml
       - ./etc/conf/admin.yaml:/app/etc/conf/admin.yaml
