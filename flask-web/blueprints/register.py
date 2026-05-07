@@ -29,20 +29,12 @@ from db import (
 register_bp = Blueprint("register", __name__)
 
 
+
 def _captcha_template_vars() -> dict[str, str]:
-    provider_name: str = current_app.config.get("CAPTCHA_PROVIDER", "")
-    provider = _captcha.get_provider(provider_name)
-    if provider is None:
-        return {
-            "captcha_script_url": "",
-            "captcha_widget_class": "",
-            "captcha_site_key": "",
-        }
-    return {
-        "captcha_script_url": provider.script_url,
-        "captcha_widget_class": provider.widget_class,
-        "captcha_site_key": current_app.config.get("CAPTCHA_SITE_KEY", ""),
-    }
+    return _captcha.template_vars(
+        current_app.config.get("CAPTCHA_PROVIDER", ""),
+        current_app.config.get("CAPTCHA_SITE_KEY", ""),
+    )
 
 
 @register_bp.route("/")

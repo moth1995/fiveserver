@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
+import captcha as _captcha
 from db import (
     browse_profiles,
     browse_users,
@@ -65,19 +66,30 @@ def check_auth():
 def login():
     if _is_logged_in():
         return redirect(url_for("admin.home"))
+    provider_name: str = current_app.config.get("CAPTCHA_PROVIDER", "")
+    captcha_vars = _captcha.template_vars(
+        provider_name,
+        current_app.config.get("CAPTCHA_SITE_KEY", ""),
+    )
     error: str | None = None
     if request.method == "POST":
-        username = request.form.get("username", "")
-        password = request.form.get("password", "")
-        if (
-            username == current_app.config["ADMIN_USER"]
-            and password == current_app.config["ADMIN_PASSWORD"]
-        ):
-            session["admin_logged_in"] = True
-            next_url = request.args.get("next") or url_for("admin.home")
-            return redirect(next_url)
-        error = "Invalid username or password."
-    return render_template("admin/login.html", error=error)
+        if provider_name and current_app.config.get("CAPTCHA_SECRET_KEY", ""):
+            provider = _captcha.get_provider(provider_name)
+            token: str = request.form.get(provider.token_field, "") if provider else ""
+            if not _captcha.verify(token, current_app.config["CAPTCHA_SECRET_KEY"], provider_name):
+                error = "CAPTCHA verification failed."
+        if error is None:
+            username = request.form.get("username", "")
+            password = request.form.get("password", "")
+            if (
+                username == current_app.config["ADMIN_USER"]
+                and password == current_app.config["ADMIN_PASSWORD"]
+            ):
+                session["admin_logged_in"] = True
+                next_url = request.args.get("next") or url_for("admin.home")
+                return redirect(next_url)
+            error = "Invalid username or password."
+    return render_template("admin/login.html", error=error, **captcha_vars)
 
 
 @admin_bp.route("/logout")
