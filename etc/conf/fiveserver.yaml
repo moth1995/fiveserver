@@ -38,9 +38,6 @@ NetworkServer:
         pes5: 20102
         we9: 20103
         we9le: 20104
-        pes5ps2: 20102
-        we9ps2: 20103
-        we9leps2: 20104
 
 WebInterface:
     port: 80

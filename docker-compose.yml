@@ -34,14 +34,17 @@ services:
     container_name: fiveserver
     restart: unless-stopped
     ports:
-      - "${PORT_NEWS_PES5:-16001}:16001"    # PES5
-      - "${PORT_NEWS_WE9:-18001}:18001"     # WE9
-      - "${PORT_NEWS_WE9LE:-19501}:19501"   # WE9LE
-      - "${PORT_MAIN:-20100}:20100"         # MainService
-      - "${PORT_MENU:-20101}:20101"         # NetworkMenuService
-      - "${PORT_LOGIN_PES5:-20102}:20102"   # LoginService PES5
-      - "${PORT_LOGIN_WE9:-20103}:20103"    # LoginService WE9
-      - "${PORT_LOGIN_WE9LE:-20104}:20104"  # LoginService WE9LE
+      - "${PORT_NEWS_PES5:-16001}:16001"        # PES5
+      - "${PORT_NEWS_WE9:-18001}:18001"         # WE9
+      - "${PORT_NEWS_WE9LE:-19501}:19501"       # WE9LE
+      - "${PORT_NEWS_PES5_PS2:-15001}:15001"    # PES5 PS2
+      - "${PORT_NEWS_WE9_PS2:-17001}:17001"     # WE9 PS2
+      - "${PORT_NEWS_WE9LE_PS2:-19001}:19001"   # WE9LE PS2
+      - "${PORT_MAIN:-20100}:20100"             # MainService
+      - "${PORT_MENU:-20101}:20101"             # NetworkMenuService
+      - "${PORT_LOGIN_PES5:-20102}:20102"       # LoginService PES5
+      - "${PORT_LOGIN_WE9:-20103}:20103"        # LoginService WE9
+      - "${PORT_LOGIN_WE9LE:-20104}:20104"      # LoginService WE9LE
     volumes:
       - ./etc/conf/fiveserver.yaml:/app/config/fiveserver.yaml:ro
       - ./etc/conf/admin.yaml:/app/config/admin.yaml:ro
