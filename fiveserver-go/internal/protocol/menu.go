@@ -487,18 +487,12 @@ func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 				return err
 			}
-			if err := s.Conn.SendZeros(0x4784, 0); err != nil {
-				return err
-			}
 			return s.Conn.SendZeros(0x4786, 0)
 		}
 		ctx := context.Background()
 		entries, err := db.GetMessagesForProfile(ctx, sc, s.User.Profile.ID)
 		if err != nil || len(entries) == 0 {
 			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
-				return err
-			}
-			if err := s.Conn.SendZeros(0x4784, 0); err != nil {
 				return err
 			}
 			return s.Conn.SendZeros(0x4786, 0)
