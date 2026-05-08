@@ -319,18 +319,6 @@ def get_profile_stats(
     }
 
 
-def create_profiles_for_user(
-    conn: pymysql.connections.Connection, user_id: int
-) -> None:
-    """Create 3 empty profile slots (ordinal 0-2) for a new user."""
-    with conn.cursor() as cur:
-        for ordinal in range(3):
-            cur.execute(
-                "INSERT INTO profiles (user_id, ordinal, name) VALUES (%s, %s, %s)",
-                (user_id, ordinal, ""),
-            )
-
-
 # ---------------------------------------------------------------------------
 # Metrics queries  (requires sql/metrics.sql applied)
 # ---------------------------------------------------------------------------

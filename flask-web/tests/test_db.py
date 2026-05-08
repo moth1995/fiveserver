@@ -136,19 +136,6 @@ class TestGetProfileStats(unittest.TestCase):
         self.assertEqual(stats["best_streak"], 5)
 
 
-class TestCreateProfilesForUser(unittest.TestCase):
-    def test_creates_three_profiles(self) -> None:
-        conn = _make_conn()
-        cursor = conn.cursor().__enter__()
-        db.create_profiles_for_user(conn, 10)
-        self.assertEqual(cursor.execute.call_count, 3)
-        for i, c in enumerate(cursor.execute.call_args_list):
-            args = c[0]
-            self.assertIn("INSERT INTO profiles", args[0])
-            self.assertEqual(args[1][0], 10)  # user_id
-            self.assertEqual(args[1][1], i)  # ordinal 0, 1, 2
-
-
 class TestRecordUserRegistration(unittest.TestCase):
     def test_inserts_with_ignore(self) -> None:
         conn = _make_conn()
