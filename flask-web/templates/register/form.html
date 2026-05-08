@@ -1,84 +1,53 @@
-{% extends "base.html" %}
-{% block title %}FiveServer Registration{% endblock %}
+{% extends "public/base.html" %}
+{% block title %}{% if nonce %}Update Account{% else %}Register{% endif %}{% endblock %}
+
 {% block head %}
+<script src="/md5.js" type="text/javascript"></script>
 {% if captcha_site_key %}
 <script src="{{ captcha_script_url }}" async defer></script>
 {% endif %}
-<style>
-  body { font-family: Arial, sans-serif; background: #f0f0f0; margin: 0; padding: 0; }
-  .container { max-width: 480px; margin: 60px auto; background: #fff;
-               border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); padding: 32px 40px; }
-  h2 { margin: 0 0 24px; color: #1e2a38; font-size: 1.4rem; }
-  label { display: block; font-weight: bold; margin: 14px 0 4px; color: #333; }
-  input[type=text], input[type=password] {
-    width: 100%; box-sizing: border-box; padding: 8px 10px;
-    border: 1px solid #ccc; border-radius: 4px; font-size: 1rem; }
-  input[type=text]:focus, input[type=password]:focus {
-    outline: none; border-color: #4a90d9; box-shadow: 0 0 0 2px rgba(74,144,217,.2); }
-  .btn { margin-top: 24px; width: 100%; padding: 10px; background: #2563eb;
-         color: #fff; border: none; border-radius: 4px; font-size: 1rem;
-         cursor: pointer; }
-  .btn:hover { background: #1d4ed8; }
-  .note { font-size: .82rem; color: #666; margin-top: 16px; }
-</style>
 {% endblock %}
+
 {% block content %}
-<div class="container">
-  <h2>FiveServer Registration</h2>
-  <script src="/md5.js" type="text/javascript"></script>
-  <script>
-  function makeHash() {
-    var a = document.getElementById('serial').value;
-    a = a.replace(/^\s+/,'').replace(/\s+$/,'').replace(/-/g,'').toUpperCase();
-    if (!a.match(/^[A-Z0-9]{20}$/)) {
-      alert('Invalid serial number. Must be 20 alphanumeric characters.');
-      return false;
-    }
-    document.getElementById('serial').value = a;
-    while (a.length < 36) { a += '\0'; }
-    var u = document.getElementById('username').value.replace(/^\s+/,'').replace(/\s+$/,'');
-    if (u.length < 3 || !u.match(/^[0-9a-zA-Z]+$/)) {
-      alert('Invalid username. Must be 3+ characters, letters and digits only.');
-      return false;
-    }
-    var p = document.getElementById('password').value;
-    if (p.length < 3) {
-      alert('Password too short. Must be at least 3 characters.');
-      return false;
-    }
-    document.getElementById('hash').value = hex_md5(a + u + '-' + p);
-    return true;
-  }
-  </script>
+<div class="container page-section">
+  <div class="register-card">
+    <h2 class="register-title">{% if nonce %}Update Account{% else %}Create an Account{% endif %}</h2>
 
-  <form name="registration" action="/register" method="POST">
-    <input type="hidden" name="nonce" id="nonce" value="{{ nonce }}">
-    <input type="hidden" name="hash" id="hash" value="">
+    <form name="registration" action="/register" method="POST">
+      <input type="hidden" name="nonce" id="nonce" value="{{ nonce }}">
+      <input type="hidden" name="hash" id="hash" value="">
 
-    <label for="serial">Serial Number</label>
-    <input type="text" name="serial" id="serial" maxlength="40"
-           value="{{ serial }}" placeholder="Enter your 20-character serial"
-           autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="serial">Serial Number</label>
+        <input class="form-input" type="text" name="serial" id="serial" maxlength="40"
+               value="{{ serial }}" placeholder="20-character serial (letters and digits)"
+               autocomplete="off">
+      </div>
 
-    <label for="username">Username</label>
-    <input type="text" name="user" id="username" maxlength="32"
-           value="{{ username }}" placeholder="Letters and digits only, 3+ characters"
-           autocomplete="off">
+      <div class="form-group">
+        <label class="form-label" for="username">Username</label>
+        <input class="form-input" type="text" name="user" id="username" maxlength="32"
+               value="{{ username }}" placeholder="Letters and digits only, 3+ characters"
+               autocomplete="off">
+      </div>
 
-    <label for="password">Password</label>
-    <input type="password" id="password" maxlength="64"
-           placeholder="Minimum 3 characters">
+      <div class="form-group">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-input" type="password" id="password" maxlength="64"
+               placeholder="Minimum 3 characters">
+      </div>
 
-    {% if captcha_site_key %}
-    <div class="{{ captcha_widget_class }}" data-sitekey="{{ captcha_site_key }}" style="margin-top:20px;"></div>
-    {% endif %}
+      {% if captcha_site_key %}
+      <div class="{{ captcha_widget_class }}" data-sitekey="{{ captcha_site_key }}" style="margin-top:16px;"></div>
+      {% endif %}
 
-    <button class="btn" type="button"
-            onclick="if (makeHash()) { document.forms['registration'].submit(); }">
-      {% if nonce %}Update Account{% else %}Register{% endif %}
-    </button>
-  </form>
+      <button class="btn register-btn" type="button"
+              onclick="if (makeHash()) { document.forms['registration'].submit(); }">
+        {% if nonce %}Update Account{% else %}Register{% endif %}
+      </button>
+    </form>
 
-  <p class="note">Your password is hashed client-side and never sent in plain text.</p>
+    <p class="register-note">Your password is hashed client-side and never sent in plain text.</p>
+  </div>
 </div>
 {% endblock %}
