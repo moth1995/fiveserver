@@ -1,4 +1,4 @@
-"""Tests for the registration blueprint."""
+"""Tests for registration routes (now in the public blueprint)."""
 
 from __future__ import annotations
 
@@ -8,28 +8,13 @@ from unittest.mock import patch, MagicMock
 from helpers import create_test_app
 
 
-def _mock_db(find_by_username=None, find_by_nonce=None, create_user_id=1):  # type: ignore[return]
-    """Return a context manager that patches db functions for register blueprint tests."""
-    patches = [
-        patch("blueprints.register.get_db", return_value=MagicMock()),
-        patch(
-            "blueprints.register.find_user_by_username", return_value=find_by_username
-        ),
-        patch("blueprints.register.find_user_by_nonce", return_value=find_by_nonce),
-        patch("blueprints.register.create_user", return_value=create_user_id),
-        patch("blueprints.register.create_profiles_for_user"),
-        patch("blueprints.register.update_user"),
-    ]
-    return patches
-
-
 class TestRegisterForm(unittest.TestCase):
     def setUp(self) -> None:
         self.app = create_test_app()
         self.client = self.app.test_client()
 
     def test_get_form_returns_200(self) -> None:
-        resp = self.client.get("/")
+        resp = self.client.get("/register")
         self.assertEqual(resp.status_code, 200)
 
     def test_get_md5js_returns_200(self) -> None:
@@ -39,8 +24,8 @@ class TestRegisterForm(unittest.TestCase):
 
     def test_modify_user_not_found_returns_404(self) -> None:
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_nonce", return_value=None),
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_nonce", return_value=None),
         ):
             resp = self.client.get("/modifyUser/badnonce")
         self.assertEqual(resp.status_code, 404)
@@ -53,8 +38,8 @@ class TestRegisterForm(unittest.TestCase):
             "reset_nonce": "validnonce",
         }
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_nonce", return_value=user),
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_nonce", return_value=user),
         ):
             resp = self.client.get("/modifyUser/validnonce")
         self.assertEqual(resp.status_code, 200)
@@ -64,7 +49,6 @@ class TestRegisterPost(unittest.TestCase):
     def setUp(self) -> None:
         self.app = create_test_app()
         self.client = self.app.test_client()
-        # 32-char hex string (valid MD5)
         self.valid_hash = "098f6bcd4621d373cade4e832627b4f6"
 
     def _post(self, username="newuser", nonce="", extra=None):  # type: ignore[return]
@@ -80,10 +64,11 @@ class TestRegisterPost(unittest.TestCase):
 
     def test_new_registration_success(self) -> None:
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_username", return_value=None),
-            patch("blueprints.register.create_user", return_value=1),
-            patch("blueprints.register.create_profiles_for_user"),
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_username", return_value=None),
+            patch("blueprints.public.create_user", return_value=1),
+            patch("blueprints.public.create_profiles_for_user"),
+            patch("blueprints.public.record_user_registration"),
         ):
             resp = self._post()
         self.assertEqual(resp.status_code, 200)
@@ -92,8 +77,8 @@ class TestRegisterPost(unittest.TestCase):
     def test_username_taken_returns_409(self) -> None:
         existing = {"id": 5, "username": "newuser"}
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_username", return_value=existing),
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_username", return_value=existing),
         ):
             resp = self._post()
         self.assertEqual(resp.status_code, 409)
@@ -107,9 +92,9 @@ class TestRegisterPost(unittest.TestCase):
             "reset_nonce": "nonce1",
         }
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_nonce", return_value=user),
-            patch("blueprints.register.update_user") as mock_update,
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_nonce", return_value=user),
+            patch("blueprints.public.update_user") as mock_update,
         ):
             resp = self._post(username="newname", nonce="nonce1")
         self.assertEqual(resp.status_code, 200)
@@ -118,8 +103,8 @@ class TestRegisterPost(unittest.TestCase):
 
     def test_modify_invalid_nonce_returns_404(self) -> None:
         with (
-            patch("blueprints.register.get_db", return_value=MagicMock()),
-            patch("blueprints.register.find_user_by_nonce", return_value=None),
+            patch("blueprints.public.get_db", return_value=MagicMock()),
+            patch("blueprints.public.find_user_by_nonce", return_value=None),
         ):
             resp = self._post(nonce="badnonce")
         self.assertEqual(resp.status_code, 404)
@@ -129,9 +114,8 @@ class TestRegisterPost(unittest.TestCase):
 
         with self.app.test_request_context():
             self.app.config["BANNED_LIST"] = make_fast_banned_list(["127.0.0.1"])
-        resp = self._post()  # test client uses 127.0.0.1
+        resp = self._post()
         self.assertEqual(resp.status_code, 403)
-        # restore
         self.app.config["BANNED_LIST"] = []
 
 
