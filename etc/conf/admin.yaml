@@ -8,3 +8,30 @@ KeysDirectory: ./etc/keys
 
 WebserverLogFile: ./log/webserver.log
 FiveserverLogFile: ./log/fiveserver.log
+
+# Public site metadata (optional — shown on public pages)
+SiteName: Fiveserver
+SiteAbout: |
+  Reverse-engineered PES5 / WE9 / WE9LE online multiplayer server.
+  Where you come to have fun playing classic football games with friends, without subscriptions or microtransactions.
+
+  We are an independent community project, not affiliated with Konami.
+
+  Credits
+  Protocol analysis: reddwarf, juce
+  Server programming: juce, reddwarf
+  Port to Go and Flask: marqisspes6
+
+ContactEmail: "contact@fiveserver.com"
+# SocialLinks: list of {platform: discord|facebook|instagram|twitter|youtube, url: "https://..."}
+SocialLinks:
+- platform: discord
+  url: "https://discord.gg/yourserver"
+- platform: twitter
+  url: "https://twitter.com/yourserver"
+- platform: facebook
+  url: "https://facebook.com/yourserver"
+- platform: instagram
+  url: "https://instagram.com/yourserver"
+- platform: youtube
+  url: "https://youtube.com/yourserver"
