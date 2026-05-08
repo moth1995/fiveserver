@@ -112,6 +112,7 @@ func RecordMatch(ctx context.Context, sc *StorageController, m *model.Match) (in
 // matching the feature/pes5-last-10-matches branch logic in data.py.
 type MatchRow struct {
 	OpponentProfileID int
+	OpponentName      string
 	MyScore           int
 	OppScore          int
 	MyTeamID          int
@@ -127,7 +128,9 @@ func GetMatchesByProfileID(ctx context.Context, sc *StorageController, profileID
 		return nil, ErrNoDB
 	}
 	q := `
-SELECT opponent_profile_id, my_score, opp_score, my_team_id, opp_team_id, played_on
+SELECT t.opponent_profile_id,
+       COALESCE(p.name, 'Profile not found') AS opponent_name,
+       t.my_score, t.opp_score, t.my_team_id, t.opp_team_id, t.played_on
 FROM (
     SELECT id,
            profile_id_away  AS opponent_profile_id,
@@ -147,6 +150,7 @@ FROM (
            played_on
     FROM matches WHERE profile_id_away = ?
 ) AS t
+LEFT JOIN profiles p ON p.id = t.opponent_profile_id
 ORDER BY t.id DESC LIMIT ?`
 
 	rows, err := sc.Read.DB().QueryContext(ctx, q, profileID, profileID, limit)
@@ -160,6 +164,7 @@ ORDER BY t.id DESC LIMIT ?`
 		var r MatchRow
 		if err := rows.Scan(
 			&r.OpponentProfileID,
+			&r.OpponentName,
 			&r.MyScore, &r.OppScore,
 			&r.MyTeamID, &r.OppTeamID,
 			&r.PlayedOn,
@@ -169,6 +174,20 @@ ORDER BY t.id DESC LIMIT ?`
 		out = append(out, &r)
 	}
 	return out, rows.Err()
+}
+
+// CountMatchesByProfileID returns the total number of matches played by a profile.
+func CountMatchesByProfileID(ctx context.Context, sc *StorageController, profileID int) (int, error) {
+	if sc == nil {
+		return 0, ErrNoDB
+	}
+	q := `SELECT COUNT(*) FROM matches WHERE profile_id_home = ? OR profile_id_away = ?`
+	var n int
+	err := sc.Read.DB().QueryRowContext(ctx, q, profileID, profileID).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db/match: count matches: %w", err)
+	}
+	return n, nil
 }
 
 // GetStreakByProfileID returns the current win streak and all-time best for a profile.
@@ -193,16 +212,20 @@ func GetStatsByProfileID(ctx context.Context, sc *StorageController, profileID i
 	}
 	q := `
 SELECT
-  SUM(CASE WHEN (profile_id_home=? AND score_home>score_away) OR (profile_id_away=? AND score_home<score_away) THEN 1 ELSE 0 END),
-  SUM(CASE WHEN (profile_id_home=? AND score_home<score_away) OR (profile_id_away=? AND score_home>score_away) THEN 1 ELSE 0 END),
-  SUM(CASE WHEN (profile_id_home=? OR profile_id_away=?) AND score_home=score_away THEN 1 ELSE 0 END),
-  SUM(CASE WHEN profile_id_home=? THEN score_home WHEN profile_id_away=? THEN score_away ELSE 0 END),
-  SUM(CASE WHEN profile_id_home=? THEN score_away WHEN profile_id_away=? THEN score_home ELSE 0 END)
-FROM matches
-WHERE profile_id_home=? OR profile_id_away=?`
+  SUM(CASE WHEN my_score > opp_score THEN 1 ELSE 0 END),
+  SUM(CASE WHEN my_score < opp_score THEN 1 ELSE 0 END),
+  SUM(CASE WHEN my_score = opp_score THEN 1 ELSE 0 END),
+  SUM(my_score),
+  SUM(opp_score)
+FROM (
+    SELECT score_home AS my_score, score_away AS opp_score
+    FROM matches WHERE profile_id_home = ?
+    UNION ALL
+    SELECT score_away AS my_score, score_home AS opp_score
+    FROM matches WHERE profile_id_away = ?
+) AS m`
 
-	id := profileID
-	row := sc.Read.DB().QueryRowContext(ctx, q, id, id, id, id, id, id, id, id, id, id, id, id)
+	row := sc.Read.DB().QueryRowContext(ctx, q, profileID, profileID)
 	s := &model.Stats{ProfileID: profileID}
 	if err := row.Scan(&s.Wins, &s.Losses, &s.Draws, &s.GoalsScored, &s.GoalsAllowed); err != nil {
 		return nil, fmt.Errorf("db/match: stats: %w", err)

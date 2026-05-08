@@ -53,6 +53,21 @@ func GetProfileByID(ctx context.Context, sc *StorageController, id int) (*model.
 	return p, nil
 }
 
+// GetProfileWithStats returns both the profile and its match stats in two
+// sequential queries. Callers that always need both should use this instead of
+// calling GetProfileByID and GetStatsByProfileID separately.
+func GetProfileWithStats(ctx context.Context, sc *StorageController, profileID int) (*model.Profile, *model.Stats, error) {
+	p, err := GetProfileByID(ctx, sc, profileID)
+	if err != nil {
+		return nil, nil, err
+	}
+	stats, err := GetStatsByProfileID(ctx, sc, profileID)
+	if err != nil {
+		stats = &model.Stats{}
+	}
+	return p, stats, nil
+}
+
 // GetProfilesByUserID returns all non-deleted profiles for a user, ordered by
 // updated_on ASC (matches Python ProfileData.getByUserId).
 func GetProfilesByUserID(ctx context.Context, sc *StorageController, userID int) ([]*model.Profile, error) {
@@ -202,32 +217,15 @@ func ComputeRanks(ctx context.Context, sc *StorageController) error {
 	}
 	defer tx.Rollback() //nolint:errcheck
 
-	rows, err := tx.QueryContext(ctx,
-		`SELECT id FROM profiles WHERE deleted=0 ORDER BY points DESC, seconds_played DESC`)
-	if err != nil {
-		return fmt.Errorf("db/profile: compute ranks query: %w", err)
+	if _, err := tx.ExecContext(ctx, `SET @r := 0`); err != nil {
+		return fmt.Errorf("db/profile: compute ranks init var: %w", err)
 	}
-	var ids []int
-	for rows.Next() {
-		var id int
-		if err := rows.Scan(&id); err != nil {
-			rows.Close() //nolint:errcheck
-			return fmt.Errorf("db/profile: compute ranks scan: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	rows.Close() //nolint:errcheck
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("db/profile: compute ranks iterate: %w", err)
-	}
-
-	for i, id := range ids {
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE profiles SET `rank`=? WHERE id=?",
-			i+1, id,
-		); err != nil {
-			return fmt.Errorf("db/profile: compute ranks update rank %d: %w", i+1, err)
-		}
+	if _, err := tx.ExecContext(ctx,
+		"UPDATE profiles SET `rank` = (@r := @r + 1) "+
+			"WHERE deleted=0 "+
+			"ORDER BY points DESC, seconds_played DESC",
+	); err != nil {
+		return fmt.Errorf("db/profile: compute ranks update: %w", err)
 	}
 	return tx.Commit()
 }
