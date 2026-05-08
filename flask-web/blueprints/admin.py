@@ -322,7 +322,9 @@ def profile_detail(profile_id: str) -> str:
         abort(404)
     stats = get_profile_stats(conn, profile["id"])
     fav_player_id = profile["fav_player"] & 0xFFFF if profile["fav_player"] else None
-    fav_player_team = (profile["fav_player"] >> 16) & 0xFFFF if profile["fav_player"] else None
+    fav_player_team = (
+        (profile["fav_player"] >> 16) & 0xFFFF if profile["fav_player"] else None
+    )
     return render_template(
         "admin/profile_detail.html",
         profile=profile,
