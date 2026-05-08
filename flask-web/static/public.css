@@ -946,3 +946,49 @@ a:hover { text-decoration: underline; }
 /* ── About page ──────────────────────────────────────────── */
 .about-page { max-width: 720px; }
 .about-desc { color: var(--muted); line-height: 1.7; font-size: .95rem; margin-bottom: 20px; white-space: pre-wrap; }
+
+/* ── Light theme ─────────────────────────────────────────── */
+[data-theme="light"] {
+  --bg:       #f0f4f8;
+  --surface:  #ffffff;
+  --surface2: #e8eef4;
+  --border:   #c8d6e5;
+  --link:     #1a56db;
+  --text:     #1e2a38;
+  --muted:    #475569;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg:       #f0f4f8;
+    --surface:  #ffffff;
+    --surface2: #e8eef4;
+    --border:   #c8d6e5;
+    --link:     #1a56db;
+    --text:     #1e2a38;
+    --muted:    #475569;
+  }
+}
+
+/* ── Theme toggle ─────────────────────────────────────────── */
+.theme-toggle {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  margin-left: 8px;
+}
+
+.theme-btn {
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: .95rem;
+  padding: 3px 7px;
+  line-height: 1;
+  transition: background .15s, border-color .15s;
+}
+
+.theme-btn:hover { border-color: var(--border); background: var(--surface2); }
+.theme-btn.active { border-color: var(--accent); color: var(--accent); }

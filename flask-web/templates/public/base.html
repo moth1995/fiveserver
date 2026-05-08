@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{{ config.SITE_NAME }}{% endblock %} — PES5/WE9 Online</title>
+  <script>(function(){var p=localStorage.getItem('theme');if(p==='light')document.documentElement.dataset.theme='light';else if(p==='dark')document.documentElement.dataset.theme='dark';window.__theme=p==='light'?'light':p==='dark'?'dark':matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}());</script>
   <link rel="stylesheet" href="/static/public.css">
   {% block head %}{% endblock %}
 </head>
@@ -19,6 +20,11 @@
     <a href="/matches"   {% if request.path.startswith('/matches')   %}class="active"{% endif %}>Matches</a>
     <a href="/downloads" {% if request.path.startswith('/downloads') %}class="active"{% endif %}>Downloads</a>
     <a href="/about"     {% if request.path.startswith('/about')     %}class="active"{% endif %}>About</a>
+    <div class="theme-toggle" role="group" aria-label="Color theme">
+      <button class="theme-btn" data-theme-val="light" title="Light mode">&#9728;</button>
+      <button class="theme-btn" data-theme-val="auto"  title="Auto (system)">&#9881;</button>
+      <button class="theme-btn" data-theme-val="dark"  title="Dark mode">&#9790;</button>
+    </div>
     <a href="/register" class="btn-register">Register</a>
   </div>
 </nav>
