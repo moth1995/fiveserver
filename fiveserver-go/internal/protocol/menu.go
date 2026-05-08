@@ -479,7 +479,7 @@ func handleSearchPlayers4600(sc *db.StorageController) HandlerFunc {
 }
 
 // ---- 0x4780 getMessages -----------------------------------------------------
-// No messages: 0x4781 + 0x4783. Has messages: 0x4782 → 0x4784 per-msg → 0x4786.
+// No messages: 0x4782 + 0x4784 empty then 4786. Has messages: 0x4782 → 0x4784 per-msg → 0x4786.
 
 func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
@@ -487,7 +487,10 @@ func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 				return err
 			}
-			return s.Conn.SendZeros(0x4784, 4)
+			if err := s.Conn.SendZeros(0x4784, 0); err != nil {
+				return err
+			}
+			return s.Conn.SendZeros(0x4786, 0)
 		}
 		ctx := context.Background()
 		entries, err := db.GetMessagesForProfile(ctx, sc, s.User.Profile.ID)
@@ -495,7 +498,10 @@ func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 				return err
 			}
-			return s.Conn.SendZeros(0x4784, 4)
+			if err := s.Conn.SendZeros(0x4784, 0); err != nil {
+				return err
+			}
+			return s.Conn.SendZeros(0x4786, 0)
 		}
 		if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 			return err
