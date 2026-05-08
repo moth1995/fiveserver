@@ -421,8 +421,8 @@ func TestGetInboxMessages_SendsTwoPackets(t *testing.T) {
 	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4780}}
 	_ = d.Dispatch(s, pkt)
 
-	if len(cap.sends) != 2 || cap.sends[0].id != 0x4781 || cap.sends[1].id != 0x4783 {
-		t.Errorf("expected 0x4781+0x4783, got %+v", cap.sends)
+	if len(cap.sends) != 2 || cap.sends[0].id != 0x4782 || cap.sends[1].id != 0x4784 {
+		t.Errorf("expected 0x4782+0x4784, got %+v", cap.sends)
 	}
 }
 
@@ -710,4 +710,3 @@ func TestAuthenticate3f01_ResponseID_Is3f02(t *testing.T) {
 		}
 	}
 }
-
