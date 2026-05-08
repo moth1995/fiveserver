@@ -321,7 +321,15 @@ def profile_detail(profile_id: str) -> str:
     if profile is None:
         abort(404)
     stats = get_profile_stats(conn, profile["id"])
-    return render_template("admin/profile_detail.html", profile=profile, stats=stats)
+    fav_player_id = profile["fav_player"] & 0xFFFF if profile["fav_player"] else None
+    fav_player_team = (profile["fav_player"] >> 16) & 0xFFFF if profile["fav_player"] else None
+    return render_template(
+        "admin/profile_detail.html",
+        profile=profile,
+        stats=stats,
+        fav_player_id=fav_player_id,
+        fav_player_team=fav_player_team,
+    )
 
 
 # ---------------------------------------------------------------------------
