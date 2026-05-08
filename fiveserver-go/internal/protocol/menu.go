@@ -259,7 +259,7 @@ func handleGetRoomList4300(hub *Hub) HandlerFunc {
 			return s.Conn.SendZeros(0x4303, 4)
 		}
 		for _, room := range lobby.Rooms() {
-			n := len(room.Players)
+			roomPlayers := room.RoomPlayers()
 			data := make([]byte, 0, 4+1+1+32+1+48)
 			data = append(data, pack32i(int32(room.ID))...)
 			data = append(data, 1) // active flag
@@ -272,12 +272,11 @@ func handleGetRoomList4300(hub *Hub) HandlerFunc {
 			data = append(data, byte(room.MatchTime/5))
 			// Player IDs (4 bytes each), padded to 48 bytes total
 			playerBytes := make([]byte, 48)
-			for i, u := range room.Players {
+			for i, u := range roomPlayers {
 				if u.Profile != nil && i*4+4 <= 48 {
 					binary.BigEndian.PutUint32(playerBytes[i*4:], uint32(int32(u.Profile.ID)))
 				}
 			}
-			_ = n
 			data = append(data, playerBytes...)
 			if err := s.Conn.SendData(0x4302, data); err != nil {
 				return err

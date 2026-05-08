@@ -567,7 +567,7 @@ func handleRelayRoomSettings4350() HandlerFunc {
 			return nil
 		}
 		// Forward settings packet to all other room members
-		for _, u := range s.User.State.Room.Players {
+		for _, u := range s.User.State.Room.RoomPlayers() {
 			if u.Profile != nil && u.Profile.ID == s.User.Profile.ID {
 				continue
 			}
@@ -594,14 +594,10 @@ func handleToggleReady4360(hub *Hub) HandlerFunc {
 		ready := pkt.Data[0] == 1
 		room := s.User.State.Room
 
-		if ready {
-			room.ReadyCount++
-		} else {
-			room.ReadyCount--
-		}
+		count, players := room.ToggleReady(ready)
 
 		// Relay to other room members
-		for _, u := range room.Players {
+		for _, u := range players {
 			if u.Profile != nil && u.Profile.ID == s.User.Profile.ID {
 				continue
 			}
@@ -617,8 +613,9 @@ func handleToggleReady4360(hub *Hub) HandlerFunc {
 		}
 
 		// When both players ready: start match
-		if room.ReadyCount == 2 {
-			for _, u := range room.Players {
+		if count == 2 {
+			room.ResetReady()
+			for _, u := range players {
 				u.NeedsLobbyChatReplay = true
 				if u.Conn != nil {
 					if cs, ok := u.Conn.(*ConnSender); ok {
@@ -626,7 +623,6 @@ func handleToggleReady4360(hub *Hub) HandlerFunc {
 					}
 				}
 			}
-			room.ReadyCount = 0
 			if room.Match != nil && room.Match.StartTime.IsZero() {
 				room.Match.StartTime = time.Now()
 			}
@@ -845,7 +841,7 @@ func applyDisconnectPenalty(hub *Hub, sc *db.StorageController, s *Session) {
 //	[1]  matchTime/5
 //	[48] player slots: 11 bytes × up to 4 players, zero-padded to 48
 func encodeRoomUpdate(room *model.Room, withTeams bool) []byte {
-	n := len(room.Players)
+	players := room.RoomPlayers()
 	data := make([]byte, 0, 4+1+1+32+1+48)
 	data = append(data, pack32i(int32(room.ID))...)
 	data = append(data, 1) // active
@@ -858,7 +854,7 @@ func encodeRoomUpdate(room *model.Room, withTeams bool) []byte {
 	data = append(data, byte(room.MatchTime/5))
 
 	playerSlots := make([]byte, 48)
-	for i, u := range room.Players {
+	for i, u := range players {
 		if u.Profile == nil || i*11+11 > 48 {
 			break
 		}
@@ -869,7 +865,6 @@ func encodeRoomUpdate(room *model.Room, withTeams bool) []byte {
 		}
 		// bytes [6:11] remain zeros
 	}
-	_ = n
 	data = append(data, playerSlots...)
 	return data
 }

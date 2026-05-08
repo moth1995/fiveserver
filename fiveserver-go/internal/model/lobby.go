@@ -194,6 +194,7 @@ const (
 )
 
 type Room struct {
+	mu              sync.Mutex
 	ID              int
 	Name            string
 	Phase           RoomPhase
@@ -223,10 +224,12 @@ func NewRoom(lobby *Lobby) *Room {
 // Enter adds a user to the room. The first user becomes Owner.
 // Mirrors Python Room.enter().
 func (r *Room) Enter(u *ConnectedUser) {
+	r.mu.Lock()
 	r.Players = append(r.Players, u)
 	if r.Owner == nil {
 		r.Owner = u
 	}
+	r.mu.Unlock()
 	if u.State != nil {
 		u.State.InRoom = true
 		u.State.Room = r
@@ -236,6 +239,7 @@ func (r *Room) Enter(u *ConnectedUser) {
 // Exit removes a user from the room and clears their state.
 // Mirrors Python Room.exit().
 func (r *Room) Exit(u *ConnectedUser) {
+	r.mu.Lock()
 	players := r.Players[:0]
 	for _, p := range r.Players {
 		if p != u {
@@ -243,7 +247,6 @@ func (r *Room) Exit(u *ConnectedUser) {
 		}
 	}
 	r.Players = players
-	// Reassign owner if they left
 	if r.Owner == u {
 		if len(r.Players) > 0 {
 			r.Owner = r.Players[0]
@@ -251,10 +254,43 @@ func (r *Room) Exit(u *ConnectedUser) {
 			r.Owner = nil
 		}
 	}
+	r.mu.Unlock()
 	if u.State != nil {
 		u.State.InRoom = false
 		u.State.Room = nil
 	}
+}
+
+// RoomPlayers returns a snapshot of current room members, safe for concurrent use.
+func (r *Room) RoomPlayers() []*ConnectedUser {
+	r.mu.Lock()
+	out := make([]*ConnectedUser, len(r.Players))
+	copy(out, r.Players)
+	r.mu.Unlock()
+	return out
+}
+
+// ToggleReady increments or decrements ReadyCount and returns the new count plus
+// a players snapshot, all under the room lock.
+func (r *Room) ToggleReady(ready bool) (count int, players []*ConnectedUser) {
+	r.mu.Lock()
+	if ready {
+		r.ReadyCount++
+	} else {
+		r.ReadyCount--
+	}
+	count = r.ReadyCount
+	players = make([]*ConnectedUser, len(r.Players))
+	copy(players, r.Players)
+	r.mu.Unlock()
+	return
+}
+
+// ResetReady sets ReadyCount to zero.
+func (r *Room) ResetReady() {
+	r.mu.Lock()
+	r.ReadyCount = 0
+	r.mu.Unlock()
 }
 
 // GetByName looks up a room in a lobby by name (used for duplicate check).
