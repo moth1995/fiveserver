@@ -216,7 +216,8 @@ func (srv *Server) handleReloadConfig(w http.ResponseWriter, r *http.Request) {
 // active matches (score, profiles, team IDs, elapsed time).
 func (srv *Server) handleLobbyStats(w http.ResponseWriter, r *http.Request) {
 	type matchEntry struct {
-		Score       string `json:"score"`
+		ScoreHome   int    `json:"home_score"`
+		ScoreAway   int    `json:"away_score"`
 		HomeProfile string `json:"home_profile"`
 		AwayProfile string `json:"away_profile"`
 		RoomName    string `json:"room_name"`
@@ -239,11 +240,12 @@ func (srv *Server) handleLobbyStats(w http.ResponseWriter, r *http.Request) {
 			Matches:     []matchEntry{},
 		}
 		for _, room := range l.Rooms() {
-			if room.Phase < model.RoomMatchStarted || room.Match == nil {
+			if room.Match == nil || room.Match.StartTime.IsZero() {
 				continue
 			}
 			me := matchEntry{
-				Score:     fmt.Sprintf("%d:%d", room.Match.ScoreHome, room.Match.ScoreAway),
+				ScoreHome: room.Match.ScoreHome,
+				ScoreAway: room.Match.ScoreAway,
 				RoomName:  room.Name,
 				MatchTime: int(time.Since(room.Match.StartTime).Minutes()),
 			}
