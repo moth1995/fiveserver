@@ -331,9 +331,9 @@ class TestPublicRoutes(unittest.TestCase):
                 get_leaderboard=MagicMock(return_value=[_minimal_leaderboard_row()])
             ),
         ):
-            resp = self.client.get("/pes5ec/ranking/we9getrank.html")
+            resp = self.client.post("/pes5ec/ranking/we9getrank.html", data={"pid": "0"})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"general,", resp.data)
+        self.assertIn(b"general\n", resp.data)
 
     def test_we9lek_ranking_returns_200(self) -> None:
         with patch.multiple(
@@ -342,9 +342,9 @@ class TestPublicRoutes(unittest.TestCase):
                 get_leaderboard=MagicMock(return_value=[_minimal_leaderboard_row()])
             ),
         ):
-            resp = self.client.get("/we9lek_pc/ranking/we9getrank.html")
+            resp = self.client.post("/we9lek_pc/ranking/we9getrank.html", data={"pid": "0"})
         self.assertEqual(resp.status_code, 200)
-        self.assertIn(b"general,", resp.data)
+        self.assertIn(b"general\n", resp.data)
 
 
 class TestPublicPagination(unittest.TestCase):
