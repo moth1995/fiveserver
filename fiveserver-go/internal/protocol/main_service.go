@@ -36,17 +36,63 @@ func registerMainServiceHandlers(d *Dispatcher, hub *Hub, sc *db.StorageControll
 	d.Register(0x4360, handleToggleReady4360(hub))
 	d.Register(0x3087, handleMatchSeriesExit3087(hub, sc)) // override login stub
 	d.Register(0x0003, handleMainDisconnect(hub, sc))      // override menu disconnect
-	d.Register(0x4504, handleAddFriend4504())
+	d.Register(0x4504, handleSendFriendRequest4504(hub))
+	d.Register(0x4508, handleFriendRequestResponse4508(hub))
 }
 
-// ---- 0x4504 addFriend ---------------------------------------------------------
+// ---- 0x4504 / 0x4508 friend request -----------------------------------------
 
-func handleAddFriend4504() HandlerFunc {
+func otherRoomPlayer(s *Session) *model.ConnectedUser {
+	for _, u := range s.User.State.Room.RoomPlayers() {
+		if u.Profile != nil && u.Profile.ID != s.User.Profile.ID {
+			return u
+		}
+	}
+	return nil
+}
+
+func handleSendFriendRequest4504(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
-		if err := s.Conn.SendZeros(0x4506, 4); err != nil {
+		if s.User == nil || s.User.Profile == nil || s.User.State == nil || s.User.State.Room == nil {
+			logger.Warnf("[friend] 0x4504: missing user/profile/state/room — dropping")
+			return nil
+		}
+		logger.Infof("[friend] 0x4504: %s sending friend request", s.User.Profile.Name)
+		target := otherRoomPlayer(s)
+		if target == nil {
+			logger.Warnf("[friend] 0x4504: no other player found in room %q", s.User.State.Room.Name)
+			return nil
+		}
+		logger.Infof("[friend] 0x4504: target is %s — looking up session", target.Profile.Name)
+		targetSess, ok := hub.GetSession(target.Profile.Name)
+		if !ok {
+			logger.Warnf("[friend] 0x4504: session not found for %s", target.Profile.Name)
+			return nil
+		}
+		logger.Infof("[friend] 0x4504: sending 0x4506+0x4507 to %s", target.Profile.Name)
+		if err := targetSess.Conn.SendZeros(0x4506, 4); err != nil {
 			return err
 		}
-		return s.Conn.SendZeros(0x4507, 0)
+		return targetSess.Conn.SendZeros(0x4507, 0)
+	}
+}
+
+func handleFriendRequestResponse4508(hub *Hub) HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if s.User == nil || s.User.Profile == nil || s.User.State == nil || s.User.State.Room == nil {
+			logger.Warnf("[friend] 0x4508: missing user/profile/state/room — dropping")
+			return nil
+		}
+		accepted := len(pkt.Data) > 0 && pkt.Data[0] == 1
+		logger.Infof("[friend] 0x4508: %s responded — accepted=%v", s.User.Profile.Name, accepted)
+		requester := otherRoomPlayer(s)
+		if requester == nil {
+			logger.Warnf("[friend] 0x4508: no requester found in room %q", s.User.State.Room.Name)
+			return nil
+		}
+		logger.Infof("[friend] 0x4508: sending 0x4509 to requester %s", requester.Profile.Name)
+		sendToUser(hub, requester, 0x4509, make([]byte, 4))
+		return nil
 	}
 }
 
