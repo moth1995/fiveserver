@@ -1,0 +1,77 @@
+{% extends "public/base.html" %}
+{% block title %}Matches{% endblock %}
+
+{% block content %}
+<div class="container page-section">
+  <h1 class="page-title">
+    {% if profile_name %}Matches — {{ profile_name | e }}{% else %}All Matches{% endif %}
+    <small style="font-size:.7em;color:var(--muted);">{{ total }} total</small>
+  </h1>
+
+  {% if profile_name %}
+  <p><a href="/matches">← All matches</a> &nbsp;|&nbsp; <a href="/profiles?q={{ profile_name | urlencode }}">View profile</a></p>
+  {% endif %}
+
+  <div class="per-page-wrap">
+    <label class="per-page-label" for="per-page-select">Rows per page:</label>
+    <select id="per-page-select" class="per-page-select">
+      {% for ps in page_sizes %}
+      <option value="{{ ps }}" {% if ps == per_page %}selected{% endif %}>{{ ps }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="pub-table-wrap">
+    <table class="pub-table">
+      <thead>
+        <tr>
+          <th class="sortable {% if sort == 'id' %}sort-active{% endif %}" data-sort="id">
+            # {% if sort == 'id' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th>Home</th>
+          <th style="text-align:center;">Score</th>
+          <th>Away</th>
+          <th class="sortable {% if sort == 'played_on' %}sort-active{% endif %}" data-sort="played_on">
+            Date {% if sort == 'played_on' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in rows %}
+        <tr>
+          <td class="muted">{{ m.id }}</td>
+          <td>
+            <img class="team-flag" src="/static/flags/{{ m.team_id_home }}.png"
+                 onerror="this.style.visibility='hidden';this.style.width='0';this.style.margin='0'" alt="">
+            <a href="/profiles?q={{ m.home_name | urlencode }}">{{ m.home_name | e }}</a>
+          </td>
+          <td class="score-cell">{{ m.score_home }}&ndash;{{ m.score_away }}</td>
+          <td>
+            <img class="team-flag" src="/static/flags/{{ m.team_id_away }}.png"
+                 onerror="this.style.visibility='hidden';this.style.width='0';this.style.margin='0'" alt="">
+            <a href="/profiles?q={{ m.away_name | urlencode }}">{{ m.away_name | e }}</a>
+          </td>
+          <td class="muted">{{ m.played_on.strftime('%Y-%m-%d %H:%M') if m.played_on else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:32px;">No matches found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    {% if page > 1 %}
+    <a class="page-link" href="?page={{ page - 1 }}&per_page={{ per_page }}&sort={{ sort }}&dir={{ direction }}{% if profile_name %}&profile={{ profile_name | urlencode }}{% endif %}">← Prev</a>
+    {% else %}
+    <span class="page-link disabled">← Prev</span>
+    {% endif %}
+    <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a class="page-link" href="?page={{ page + 1 }}&per_page={{ per_page }}&sort={{ sort }}&dir={{ direction }}{% if profile_name %}&profile={{ profile_name | urlencode }}{% endif %}">Next →</a>
+    {% else %}
+    <span class="page-link disabled">Next →</span>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,95 @@
+{% extends "public/base.html" %}
+{% block title %}Rankings{% endblock %}
+
+{% block content %}
+<div class="container page-section">
+  <h1 class="page-title">Rankings <small style="font-size:.7em;color:var(--muted);">{{ total }} players</small></h1>
+
+  <div class="div-filters">
+    <a class="div-pill {% if not div_param %}active{% endif %}" data-div="all" href="#">All</a>
+    {% for div, label in [('1','D1'),('2','D2'),('3a','D3A'),('3b','D3B'),('a','A')] %}
+    <a class="div-pill {% if div_param == div %}active{% endif %}" data-div="{{ div }}" href="#">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="per-page-wrap">
+    <label class="per-page-label" for="per-page-select">Rows per page:</label>
+    <select id="per-page-select" class="per-page-select">
+      {% for ps in page_sizes %}
+      <option value="{{ ps }}" {% if ps == per_page %}selected{% endif %}>{{ ps }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="pub-table-wrap">
+    <table class="pub-table">
+      <thead>
+        <tr>
+          <th class="sortable {% if sort == 'rank' %}sort-active{% endif %}" data-sort="rank">
+            # {% if sort == 'rank' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'name' %}sort-active{% endif %}" data-sort="name">
+            Player {% if sort == 'name' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'division' %}sort-active{% endif %}" data-sort="division">
+            Division {% if sort == 'division' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'points' %}sort-active{% endif %}" data-sort="points">
+            Points {% if sort == 'points' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'seconds_played' %}sort-active{% endif %}" data-sort="seconds_played">
+            Play Time {% if sort == 'seconds_played' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'games' %}sort-active{% endif %}" data-sort="games">
+            Games {% if sort == 'games' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'wins' %}sort-active{% endif %}" data-sort="wins">
+            W {% if sort == 'wins' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'draws' %}sort-active{% endif %}" data-sort="draws">
+            D {% if sort == 'draws' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'losses' %}sort-active{% endif %}" data-sort="losses">
+            L {% if sort == 'losses' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+          <th class="sortable {% if sort == 'best' %}sort-active{% endif %}" data-sort="best">
+            Best Streak {% if sort == 'best' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.rank }}</td>
+          <td><a href="/profiles?q={{ r.name | urlencode }}">{{ r.name }}</a></td>
+          <td><span class="badge badge-{{ r.division_label | lower | replace('d','') }}">{{ r.division_label }}</span></td>
+          <td>{{ r.points }}</td>
+          <td>{{ r.seconds_played | format_playtime }}</td>
+          <td>{{ r.games }}</td>
+          <td>{{ r.wins }}</td>
+          <td>{{ r.draws }}</td>
+          <td>{{ r.losses }}</td>
+          <td>{{ r.best }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" style="text-align:center;color:var(--muted);padding:32px;">No players found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    {% if page > 1 %}
+    <a class="page-link" href="?page={{ page - 1 }}&per_page={{ per_page }}&sort={{ sort }}&dir={{ direction }}{% if div_param %}&div={{ div_param }}{% endif %}">← Prev</a>
+    {% else %}
+    <span class="page-link disabled">← Prev</span>
+    {% endif %}
+    <span class="page-info">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a class="page-link" href="?page={{ page + 1 }}&per_page={{ per_page }}&sort={{ sort }}&dir={{ direction }}{% if div_param %}&div={{ div_param }}{% endif %}">Next →</a>
+    {% else %}
+    <span class="page-link disabled">Next →</span>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "public/base.html" %}
+{% block title %}Downloads{% endblock %}
+
+{% block content %}
+<div class="container page-section">
+  <h1 class="page-title">Downloads</h1>
+
+  {% if section is none %}
+  <div class="dl-landing">
+    <a class="dl-section-card" href="{{ url_for('public.downloads', section='network') }}">
+      <span class="dl-section-icon">💾</span>
+      <span class="dl-section-title">Network Databases</span>
+      <span class="dl-section-desc">Patches and network.cfg files for PES5 / WE9 / WE9LE</span>
+      <span class="dl-section-browse">Browse →</span>
+    </a>
+    <a class="dl-section-card" href="{{ url_for('public.downloads', section='tools') }}">
+      <span class="dl-section-icon">🔧</span>
+      <span class="dl-section-title">Tools</span>
+      <span class="dl-section-desc">Editors, kitserver, converters and utilities</span>
+      <span class="dl-section-browse">Browse →</span>
+    </a>
+  </div>
+
+  {% else %}
+
+  <nav class="dl-breadcrumb">
+    {% for crumb in breadcrumbs %}
+    {% if loop.last %}
+    <span class="dl-crumb-current">{{ crumb.label }}</span>
+    {% else %}
+    <a class="dl-crumb" href="{{ crumb.url }}">{{ crumb.label }}</a>
+    <span class="dl-crumb-sep">›</span>
+    {% endif %}
+    {% endfor %}
+  </nav>
+
+  <div class="pub-table-wrap">
+    <table class="pub-table dl-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Size</th>
+          <th>Modified</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if subpath %}
+        <tr>
+          <td colspan="4">
+            <a class="dl-parent" href="{{ url_for('public.downloads', section=section, subpath='/'.join(subpath.split('/')[:-1])) if '/' in subpath else url_for('public.downloads', section=section) }}">
+              ← Up
+            </a>
+          </td>
+        </tr>
+        {% endif %}
+        {% for entry in entries %}
+        <tr>
+          <td>
+            {% if entry.is_dir %}
+            <span class="dl-icon">📁</span>
+            {% else %}
+            <span class="dl-icon">📄</span>
+            {% endif %}
+            <a href="{{ entry.url }}">{{ entry.name | e }}</a>
+          </td>
+          <td class="muted">{{ entry.size or '—' }}</td>
+          <td class="muted">{{ entry.modified.strftime('%Y-%m-%d') }}</td>
+          <td>
+            {% if not entry.is_dir %}
+            <a class="dl-btn" href="{{ entry.url }}">⬇ Download</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="text-align:center;color:var(--muted);padding:32px;">Empty folder.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
