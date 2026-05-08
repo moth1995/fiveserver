@@ -1,5 +1,8 @@
 {% extends "base.html" %}
-{% block head %}<link rel="stylesheet" href="/static/admin.css">{% endblock %}
+{% block head %}
+<script>(function(){var p=localStorage.getItem('theme');if(p==='light')document.documentElement.dataset.theme='light';else if(p==='dark')document.documentElement.dataset.theme='dark';window.__theme=p==='light'?'light':p==='dark'?'dark':matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';}());</script>
+<link rel="stylesheet" href="/static/admin.css">
+{% endblock %}
 {% block content %}
 <aside class="sidebar">
   <div class="sidebar-header">&#9917; Fiveserver Admin</div>
@@ -21,7 +24,15 @@
   </nav>
 </aside>
 <div class="main">
-  <div class="topbar"><h1>{% block title %}Admin{% endblock %}</h1></div>
+  <div class="topbar">
+    <h1>{% block title %}Admin{% endblock %}</h1>
+    <div class="theme-toggle" role="group" aria-label="Color theme">
+      <button class="theme-btn" data-theme-val="light" title="Light mode">&#9728;</button>
+      <button class="theme-btn" data-theme-val="auto"  title="Auto (system)">&#9881;</button>
+      <button class="theme-btn" data-theme-val="dark"  title="Dark mode">&#9790;</button>
+    </div>
+  </div>
   <div class="page-body">{% block body %}{% endblock %}</div>
 </div>
+<script src="/static/admin.js"></script>
 {% endblock %}
