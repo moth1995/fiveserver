@@ -3,8 +3,9 @@ package protocol
 import (
 	"context"
 	"encoding/binary"
-	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"time"
+
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 
 	"github.com/fiveserver/fiveserver-go/internal/db"
 	"github.com/fiveserver/fiveserver-go/internal/model"
@@ -35,6 +36,18 @@ func registerMainServiceHandlers(d *Dispatcher, hub *Hub, sc *db.StorageControll
 	d.Register(0x4360, handleToggleReady4360(hub))
 	d.Register(0x3087, handleMatchSeriesExit3087(hub, sc)) // override login stub
 	d.Register(0x0003, handleMainDisconnect(hub, sc))      // override menu disconnect
+	d.Register(0x4504, handleAddFriend4504())
+}
+
+// ---- 0x4504 addFriend ---------------------------------------------------------
+
+func handleAddFriend4504() HandlerFunc {
+	return func(s *Session, pkt Packet) error {
+		if err := s.Conn.SendZeros(0x4506, 4); err != nil {
+			return err
+		}
+		return s.Conn.SendZeros(0x4507, 0)
+	}
 }
 
 // ---- 0x4310 createRoom ------------------------------------------------------
