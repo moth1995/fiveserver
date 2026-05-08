@@ -1,0 +1,154 @@
+{% extends "public/base.html" %}
+{% block title %}Players{% endblock %}
+
+{% block content %}
+<div class="container page-section">
+  <h1 class="page-title">Player Search</h1>
+
+  <form class="profile-search-form" method="get" action="/profiles" autocomplete="off">
+    <div class="profile-search-wrap">
+      <input id="profile-search" class="profile-search-input" type="text"
+             name="q" value="{{ query | e }}" placeholder="Search by name…">
+      <button class="btn" type="submit">Search</button>
+    </div>
+  </form>
+
+  {% if query and not profile %}
+  <p class="search-notice">No player found for <strong>{{ query | e }}</strong>.</p>
+  {% endif %}
+
+  {% if profile %}
+  <div class="stats-card-section">
+    <div class="stats-card-header">
+      <h2 class="stats-card-name">{{ profile.name | e }}</h2>
+      <span class="badge badge-{{ profile.division_label | lower | replace('d','') }}">{{ profile.division_label }}</span>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-cell">
+        <span class="stat-label">Points</span>
+        <span class="stat-value">{{ profile.points }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Play Time</span>
+        <span class="stat-value">{{ profile.seconds_played | format_playtime }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Games</span>
+        <span class="stat-value">{{ profile.games }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Win %</span>
+        <span class="stat-value">{{ profile.win_pct }}%</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Wins</span>
+        <span class="stat-value">{{ profile.wins }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Draws</span>
+        <span class="stat-value">{{ profile.draws }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Losses</span>
+        <span class="stat-value">{{ profile.losses }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Goals For</span>
+        <span class="stat-value">{{ profile.goals_for }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Goals Against</span>
+        <span class="stat-value">{{ profile.goals_against }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Current Streak</span>
+        <span class="stat-value">{{ profile.streak }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Best Streak</span>
+        <span class="stat-value">{{ profile.best_streak }}</span>
+      </div>
+      <div class="stat-cell">
+        <span class="stat-label">Rank</span>
+        <span class="stat-value">#{{ profile.rank }}</span>
+      </div>
+    </div>
+
+    <div class="profile-matches-link">
+      <a href="/matches?profile={{ profile.name | urlencode }}">All matches →</a>
+    </div>
+  </div>
+
+  {% if recent_matches %}
+  <h3 class="section-subtitle">Last 10 Matches</h3>
+  <div class="pub-table-wrap">
+    <table class="pub-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Home</th>
+          <th style="text-align:center;">Score</th>
+          <th>Away</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for m in recent_matches %}
+        <tr>
+          <td class="muted">{{ m.played_on.strftime('%Y-%m-%d %H:%M') if m.played_on else '—' }}</td>
+          <td>
+            <img class="team-flag" src="/static/flags/{{ m.team_id_home }}.png"
+                 onerror="this.style.visibility='hidden';this.style.width='0';this.style.margin='0'" alt="">
+            <a href="/profiles?q={{ m.home_name | urlencode }}">{{ m.home_name | e }}</a>
+          </td>
+          <td class="score-cell">{{ m.score_home }}&ndash;{{ m.score_away }}</td>
+          <td>
+            <img class="team-flag" src="/static/flags/{{ m.team_id_away }}.png"
+                 onerror="this.style.visibility='hidden';this.style.width='0';this.style.margin='0'" alt="">
+            <a href="/profiles?q={{ m.away_name | urlencode }}">{{ m.away_name | e }}</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+
+  {% if top_players %}
+  <h3 class="section-subtitle">Most Active Players</h3>
+  <div class="pub-table-wrap">
+    <table class="pub-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Player</th>
+          <th>Division</th>
+          <th>Games</th>
+          <th>W</th>
+          <th>D</th>
+          <th>L</th>
+          <th>Points</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in top_players %}
+        <tr>
+          <td>{{ r.rank }}</td>
+          <td><a href="/profiles?q={{ r.name | urlencode }}">{{ r.name }}</a></td>
+          <td><span class="badge badge-{{ r.division_label | lower | replace('d','') }}">{{ r.division_label }}</span></td>
+          <td>{{ r.games }}</td>
+          <td>{{ r.wins }}</td>
+          <td>{{ r.draws }}</td>
+          <td>{{ r.losses }}</td>
+          <td>{{ r.points }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No players yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

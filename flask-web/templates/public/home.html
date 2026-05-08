@@ -1,0 +1,50 @@
+{% extends "public/base.html" %}
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="container">
+    <h1>PES5 / WE9 / WE9LE Online Multiplayer</h1>
+    <p>Classic football. Live servers. No subscription.</p>
+    <a href="/register" class="btn">Create an Account</a>
+  </div>
+</section>
+
+<div class="stats-strip">
+  <div class="stats-strip-item">
+    <span class="stats-strip-value">{{ total_players }}</span>
+    <span class="stats-strip-label">Players</span>
+  </div>
+  <div class="stats-strip-item">
+    <span class="stats-strip-value">{{ total_matches }}</span>
+    <span class="stats-strip-label">Matches played</span>
+  </div>
+  <div class="stats-strip-item">
+    <span class="stats-strip-value" id="stat-online">—</span>
+    <span class="stats-strip-label">Online now</span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="carousel-wrap">
+    <div class="carousel-header">
+      <button class="carousel-arrow prev" aria-label="Previous">&#8249;</button>
+      <div class="carousel-dots">
+        <div class="carousel-dot active" data-idx="0"></div>
+        <div class="carousel-dot" data-idx="1"></div>
+      </div>
+      <span class="carousel-title">Live Matches</span>
+      <button class="carousel-refresh" aria-label="Refresh">&#8635;</button>
+      <button class="carousel-arrow next" aria-label="Next">&#8250;</button>
+    </div>
+    <div class="carousel-body">
+      <div class="carousel-slide active" id="slide-live">
+        <div class="carousel-empty">Loading…</div>
+      </div>
+      <div class="carousel-slide" id="slide-recent">
+        <div class="carousel-empty">Loading…</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
