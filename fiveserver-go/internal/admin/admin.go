@@ -50,7 +50,6 @@ func (srv *Server) ListenAndServe(addr string) error {
 	mux.HandleFunc("POST /admin/chat", srv.handleBroadcast)
 	mux.HandleFunc("GET /admin/chat", srv.handleChatHistory)
 	mux.HandleFunc("POST /admin/kick", srv.handleKick)
-	mux.HandleFunc("GET /admin/config", srv.handleGetConfig)
 	mux.HandleFunc("POST /admin/reload-config", srv.handleReloadConfig)
 	mux.HandleFunc("GET /stats/users", srv.handleUsers)
 	mux.HandleFunc("GET /lobby-stats", srv.handleLobbyStats)
@@ -186,45 +185,6 @@ func (srv *Server) handleKick(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{"kicked": req.Profile}); err != nil {
 		logger.Errorf("[admin] handleKick: encode response: %v", err)
-	}
-}
-
-// handleGetConfig handles GET /api/config — returns live-reloadable config fields.
-func (srv *Server) handleGetConfig(w http.ResponseWriter, r *http.Request) {
-	c := srv.cfg
-	type configView struct {
-		Debug         bool                    `json:"debug"`
-		ServerName    string                  `json:"server_name"`
-		GreetingText  string                  `json:"greeting_text"`
-		MaxUsers      int                     `json:"max_users"`
-		Lobbies       []string                `json:"lobbies"`
-		BannedList    string                  `json:"banned_list"`
-		StoreSettings bool                    `json:"store_settings"`
-		ShowStats     bool                    `json:"show_stats"`
-		Chat          config.ChatConfig       `json:"chat"`
-		Disconnects   config.DisconnectsConfig `json:"disconnects"`
-		Roster        config.RosterConfig     `json:"roster"`
-	}
-	lobbyNames := make([]string, len(c.Lobbies))
-	for i, l := range c.Lobbies {
-		lobbyNames[i] = l.Name
-	}
-	view := configView{
-		Debug:         c.Debug,
-		ServerName:    c.ServerName,
-		GreetingText:  c.Greeting.Text,
-		MaxUsers:      c.MaxUsers,
-		Lobbies:       lobbyNames,
-		BannedList:    c.BannedList,
-		StoreSettings: c.StoreSettings,
-		ShowStats:     c.ShowStats,
-		Chat:          c.Chat,
-		Disconnects:   c.Disconnects,
-		Roster:        c.Roster,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(view); err != nil {
-		logger.Errorf("[admin] handleGetConfig: encode response: %v", err)
 	}
 }
 
