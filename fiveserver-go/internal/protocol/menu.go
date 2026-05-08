@@ -4,9 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"github.com/fiveserver/fiveserver-go/internal/logger"
 	"strings"
 	"time"
+
+	"github.com/fiveserver/fiveserver-go/internal/logger"
 
 	"github.com/fiveserver/fiveserver-go/internal/db"
 	"github.com/fiveserver/fiveserver-go/internal/model"
@@ -483,18 +484,18 @@ func handleSearchPlayers4600(sc *db.StorageController) HandlerFunc {
 func handleGetMessages4780(sc *db.StorageController) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		if s.User == nil || s.User.Profile == nil {
-			if err := s.Conn.SendZeros(0x4781, 4); err != nil {
+			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 				return err
 			}
-			return s.Conn.SendZeros(0x4783, 4)
+			return s.Conn.SendZeros(0x4784, 4)
 		}
 		ctx := context.Background()
 		entries, err := db.GetMessagesForProfile(ctx, sc, s.User.Profile.ID)
 		if err != nil || len(entries) == 0 {
-			if err := s.Conn.SendZeros(0x4781, 4); err != nil {
+			if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 				return err
 			}
-			return s.Conn.SendZeros(0x4783, 4)
+			return s.Conn.SendZeros(0x4784, 4)
 		}
 		if err := s.Conn.SendZeros(0x4782, 4); err != nil {
 			return err
