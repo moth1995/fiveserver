@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -32,7 +33,6 @@ from crypto import blowfish_encrypt
 from db import (
     count_leaderboard,
     count_public_matches,
-    create_profiles_for_user,
     create_user,
     find_user_by_nonce,
     find_user_by_username,
@@ -504,6 +504,17 @@ def register() -> Any:
     username: str = request.form.get("user", "")
     hex_hash: str = request.form.get("hash", "")
     nonce: str = request.form.get("nonce", "")
+
+    if not re.fullmatch(r"[0-9a-f]{32}", hex_hash):
+        return (
+            render_template(
+                "register/result.html",
+                message="ERROR: invalid hash",
+                success=False,
+            ),
+            400,
+        )
+
     encrypted_hash: str = blowfish_encrypt(hex_hash)
     conn = get_db()
 
@@ -519,7 +530,6 @@ def register() -> Any:
                 409,
             )
         new_id: int = create_user(conn, username, serial, encrypted_hash)
-        create_profiles_for_user(conn, new_id)
         record_user_registration(conn, new_id)
         return render_template(
             "register/result.html",

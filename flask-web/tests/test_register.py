@@ -67,7 +67,6 @@ class TestRegisterPost(unittest.TestCase):
             patch("blueprints.public.get_db", return_value=MagicMock()),
             patch("blueprints.public.find_user_by_username", return_value=None),
             patch("blueprints.public.create_user", return_value=1),
-            patch("blueprints.public.create_profiles_for_user"),
             patch("blueprints.public.record_user_registration"),
         ):
             resp = self._post()
