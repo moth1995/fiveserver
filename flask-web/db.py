@@ -114,15 +114,16 @@ def browse_users(
     order = f"ORDER BY {sort} {'DESC' if direction.lower() == 'desc' else 'ASC'}"
     with conn.cursor() as cur:
         if search:
+            pattern = f"%{search}%"
             cur.execute(
                 "SELECT COUNT(id) AS n FROM users WHERE deleted = 0 AND username LIKE %s",
-                (f"%{search}%",),
+                (pattern,),
             )
             total: int = cur.fetchone()["n"]  # type: ignore[index]
             cur.execute(
                 f"SELECT {_USER_COLS} FROM users WHERE deleted = 0 AND username LIKE %s "
                 f"{order} LIMIT %s OFFSET %s",
-                (f"%{search}%", limit, offset),
+                (pattern, limit, offset),
             )
         else:
             cur.execute("SELECT COUNT(id) AS n FROM users WHERE deleted = 0")
@@ -268,53 +269,34 @@ def get_profile_stats(
 ) -> dict[str, Any]:
     """Return aggregated stats for a single profile (wins, losses, draws, goals, streak)."""
     with conn.cursor() as cur:
-        # wins
         cur.execute(
-            "SELECT COUNT(id) AS n FROM matches "
-            "WHERE (profile_id_home=%s AND score_home>score_away) "
-            "OR (profile_id_away=%s AND score_home<score_away)",
-            (profile_id, profile_id),
+            "SELECT "
+            "  SUM(CASE WHEN (profile_id_home=%s AND score_home>score_away)"
+            "            OR  (profile_id_away=%s AND score_home<score_away)"
+            "       THEN 1 ELSE 0 END) AS wins,"
+            "  SUM(CASE WHEN (profile_id_home=%s AND score_home<score_away)"
+            "            OR  (profile_id_away=%s AND score_home>score_away)"
+            "       THEN 1 ELSE 0 END) AS losses,"
+            "  SUM(CASE WHEN (profile_id_home=%s OR profile_id_away=%s)"
+            "            AND  score_home=score_away"
+            "       THEN 1 ELSE 0 END) AS draws,"
+            "  COALESCE(SUM(CASE WHEN profile_id_home=%s THEN score_home"
+            "                    WHEN profile_id_away=%s THEN score_away"
+            "               ELSE 0 END), 0) AS goals_for,"
+            "  COALESCE(SUM(CASE WHEN profile_id_home=%s THEN score_away"
+            "                    WHEN profile_id_away=%s THEN score_home"
+            "               ELSE 0 END), 0) AS goals_against"
+            " FROM matches WHERE profile_id_home=%s OR profile_id_away=%s",
+            (profile_id,) * 12,
         )
-        wins: int = cur.fetchone()["n"]  # type: ignore[index]
+        agg = cur.fetchone()
+        wins: int = int(agg["wins"] or 0)  # type: ignore[index]
+        losses: int = int(agg["losses"] or 0)  # type: ignore[index]
+        draws: int = int(agg["draws"] or 0)  # type: ignore[index]
+        goals_for: int = int(agg["goals_for"])  # type: ignore[index]
+        goals_against: int = int(agg["goals_against"])  # type: ignore[index]
 
-        # losses
-        cur.execute(
-            "SELECT COUNT(id) AS n FROM matches "
-            "WHERE (profile_id_home=%s AND score_home<score_away) "
-            "OR (profile_id_away=%s AND score_home>score_away)",
-            (profile_id, profile_id),
-        )
-        losses: int = cur.fetchone()["n"]  # type: ignore[index]
-
-        # draws
-        cur.execute(
-            "SELECT COUNT(id) AS n FROM matches "
-            "WHERE (profile_id_home=%s OR profile_id_away=%s) "
-            "AND score_home=score_away",
-            (profile_id, profile_id),
-        )
-        draws: int = cur.fetchone()["n"]  # type: ignore[index]
-
-        # goals scored / conceded (home)
-        cur.execute(
-            "SELECT COALESCE(SUM(score_home),0) AS gf, COALESCE(SUM(score_away),0) AS ga "
-            "FROM matches WHERE profile_id_home=%s",
-            (profile_id,),
-        )
-        home_row = cur.fetchone()
-
-        # goals scored / conceded (away)
-        cur.execute(
-            "SELECT COALESCE(SUM(score_away),0) AS gf, COALESCE(SUM(score_home),0) AS ga "
-            "FROM matches WHERE profile_id_away=%s",
-            (profile_id,),
-        )
-        away_row = cur.fetchone()
-
-        goals_for: int = int(home_row["gf"]) + int(away_row["gf"])  # type: ignore[index]
-        goals_against: int = int(home_row["ga"]) + int(away_row["ga"])  # type: ignore[index]
-
-        # streak
+        # streak is in a separate table
         cur.execute("SELECT wins, best FROM streaks WHERE profile_id=%s", (profile_id,))
         streak_row = cur.fetchone()
         streak: int = streak_row["wins"] if streak_row else 0  # type: ignore[index]

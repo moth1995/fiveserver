@@ -82,6 +82,57 @@ func TestGetMatchesByProfileID_NoServer_ReturnsError(t *testing.T) {
 	}
 }
 
+// --- CountMatchesByProfileID ---
+
+func TestCountMatchesByProfileID_NilSC_ReturnsErrNoDB(t *testing.T) {
+	_, err := db.CountMatchesByProfileID(context.Background(), nil, 1)
+	if err != db.ErrNoDB {
+		t.Fatalf("expected ErrNoDB, got %v", err)
+	}
+}
+
+func TestCountMatchesByProfileID_NoServer_ReturnsError(t *testing.T) {
+	sc := newSC(t)
+	_, err := db.CountMatchesByProfileID(context.Background(), sc, 1)
+	if err == nil {
+		t.Fatal("expected error when no server available")
+	}
+}
+
+// --- GetStatsByProfileID ---
+
+func TestGetStatsByProfileID_NilSC_ReturnsErrNoDB(t *testing.T) {
+	_, err := db.GetStatsByProfileID(context.Background(), nil, 1)
+	if err != db.ErrNoDB {
+		t.Fatalf("expected ErrNoDB, got %v", err)
+	}
+}
+
+func TestGetStatsByProfileID_NoServer_ReturnsError(t *testing.T) {
+	sc := newSC(t)
+	_, err := db.GetStatsByProfileID(context.Background(), sc, 1)
+	if err == nil {
+		t.Fatal("expected error when no server available")
+	}
+}
+
+// --- ComputeRanks ---
+
+func TestComputeRanks_NilSC_ReturnsErrNoDB(t *testing.T) {
+	err := db.ComputeRanks(context.Background(), nil)
+	if err != db.ErrNoDB {
+		t.Fatalf("expected ErrNoDB, got %v", err)
+	}
+}
+
+func TestComputeRanks_NoServer_ReturnsError(t *testing.T) {
+	sc := newSC(t)
+	err := db.ComputeRanks(context.Background(), sc)
+	if err == nil {
+		t.Fatal("expected error when no server available")
+	}
+}
+
 // --- GetStreakByProfileID ---
 
 func TestGetStreakByProfileID_NoServer_ReturnsZero(t *testing.T) {

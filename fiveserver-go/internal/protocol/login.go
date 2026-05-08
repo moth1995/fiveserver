@@ -177,10 +177,7 @@ func handleGetProfiles(hub *Hub, sc *db.StorageController) HandlerFunc {
 			var games int
 			if cfg.ShowStats && p.ID > 0 {
 				ctx := context.Background()
-				matches, err := db.GetMatchesByProfileID(ctx, sc, p.ID, 10000)
-				if err == nil {
-					games = len(matches)
-				}
+				games, _ = db.CountMatchesByProfileID(ctx, sc, p.ID)
 			}
 			// [1] index, [4] id, [16] name, [4] playtime, [1] division, [4] points, [2] games
 			entry := make([]byte, 32)
@@ -326,17 +323,10 @@ func handleGetMatchResults(hub *Hub, sc *db.StorageController) HandlerFunc {
 		for i := len(matches) - 1; i >= 0; i-- {
 			m := matches[i]
 
-			// Fetch opponent name
-			oppName := "Profile not found"
-			oppProfile, err := db.GetProfileByID(ctx, sc, m.OpponentProfileID)
-			if err == nil && oppProfile != nil {
-				oppName = oppProfile.Name
-			}
-
 			entry := make([]byte, 0, 44)
 			entry = append(entry, 0) // unknown byte
 			entry = append(entry, model.PadWithZeros(m.PlayedOn.UTC().Format("2006/01/02 15:04:05"), 19)...)
-			entry = append(entry, model.PadWithZeros(oppName, 16)...)
+			entry = append(entry, model.PadWithZeros(m.OpponentName, 16)...)
 			entry = append(entry, pack32i(int32(m.OpponentProfileID))...)
 			entry = append(entry, byte(m.MyScore))
 			entry = append(entry, byte(m.OppScore))

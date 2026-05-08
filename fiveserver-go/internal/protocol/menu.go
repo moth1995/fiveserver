@@ -86,13 +86,9 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		}
 
 		ctx := context.Background()
-		p, err := db.GetProfileByID(ctx, sc, s.User.Profile.ID)
+		p, stats, err := db.GetProfileWithStats(ctx, sc, s.User.Profile.ID)
 		if err != nil {
 			return s.Conn.SendZeros(0x4103, 0)
-		}
-		stats, err := db.GetStatsByProfileID(ctx, sc, p.ID)
-		if err != nil {
-			stats = &model.Stats{}
 		}
 		info := append([]byte{0, 0, 0, 0}, formatProfileInfo(p, stats, hub.Config().ShowStats)...)
 		return s.Conn.SendData(0x4103, info)
@@ -108,13 +104,9 @@ func handleGetProfile4102(hub *Hub, sc *db.StorageController) HandlerFunc {
 		}
 		profileID := int(int32(binary.BigEndian.Uint32(pkt.Data[0:4])))
 		ctx := context.Background()
-		p, err := db.GetProfileByID(ctx, sc, profileID)
+		p, stats, err := db.GetProfileWithStats(ctx, sc, profileID)
 		if err != nil {
 			return s.Conn.SendZeros(0x4103, 0)
-		}
-		stats, err := db.GetStatsByProfileID(ctx, sc, p.ID)
-		if err != nil {
-			stats = &model.Stats{}
 		}
 		data := append([]byte{0, 0, 0, 0}, formatProfileInfo(p, stats, hub.Config().ShowStats)...)
 		return s.Conn.SendData(0x4103, data)

@@ -114,16 +114,33 @@ class TestBrowseUsers(unittest.TestCase):
         self.assertIn("LIKE", calls[0][0][0])
 
 
+class TestBrowseProfiles(unittest.TestCase):
+    def test_returns_total_and_rows(self) -> None:
+        conn = _make_conn()
+        cursor = conn.cursor().__enter__()
+        cursor.fetchone.side_effect = [{"n": 5}]
+        cursor.fetchall.return_value = [{"id": i} for i in range(1, 6)]
+        total, rows = db.browse_profiles(conn, offset=0, limit=50)
+        self.assertEqual(total, 5)
+        self.assertEqual(len(rows), 5)
+
+    def test_search_uses_like(self) -> None:
+        conn = _make_conn()
+        cursor = conn.cursor().__enter__()
+        cursor.fetchone.side_effect = [{"n": 2}]
+        cursor.fetchall.return_value = [{"id": 1}, {"id": 2}]
+        db.browse_profiles(conn, query="hero")
+        calls = cursor.execute.call_args_list
+        # First call is COUNT with LIKE
+        self.assertIn("LIKE", calls[0][0][0])
+
+
 class TestGetProfileStats(unittest.TestCase):
     def test_returns_stats_dict(self) -> None:
         conn = _make_conn()
         cursor = conn.cursor().__enter__()
         cursor.fetchone.side_effect = [
-            {"n": 5},  # wins
-            {"n": 2},  # losses
-            {"n": 1},  # draws
-            {"gf": 10, "ga": 4},  # home goals
-            {"gf": 3, "ga": 2},  # away goals
+            {"wins": 5, "losses": 2, "draws": 1, "goals_for": 13, "goals_against": 6},  # aggregation
             {"wins": 3, "best": 5},  # streak
         ]
         stats = db.get_profile_stats(conn, 1)
