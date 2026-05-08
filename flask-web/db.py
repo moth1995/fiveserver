@@ -97,13 +97,21 @@ def find_user_by_nonce(
         return cur.fetchone()  # type: ignore[return-value]
 
 
+_USER_SORT_COLS = {"id", "username", "total_online_seconds", "updated_on"}
+
+
 def browse_users(
     conn: pymysql.connections.Connection,
     offset: int = 0,
     limit: int = 50,
     search: str | None = None,
+    sort: str = "id",
+    direction: str = "asc",
 ) -> tuple[int, list[dict[str, Any]]]:
     """Return (total_count, rows) for paginated user listing."""
+    if sort not in _USER_SORT_COLS:
+        sort = "id"
+    order = f"ORDER BY {sort} {'DESC' if direction.lower() == 'desc' else 'ASC'}"
     with conn.cursor() as cur:
         if search:
             cur.execute(
@@ -113,7 +121,7 @@ def browse_users(
             total: int = cur.fetchone()["n"]  # type: ignore[index]
             cur.execute(
                 f"SELECT {_USER_COLS} FROM users WHERE deleted = 0 AND username LIKE %s "
-                "ORDER BY username LIMIT %s OFFSET %s",
+                f"{order} LIMIT %s OFFSET %s",
                 (f"%{search}%", limit, offset),
             )
         else:
@@ -121,7 +129,7 @@ def browse_users(
             total = cur.fetchone()["n"]  # type: ignore[index]
             cur.execute(
                 f"SELECT {_USER_COLS} FROM users WHERE deleted = 0 "
-                "ORDER BY username LIMIT %s OFFSET %s",
+                f"{order} LIMIT %s OFFSET %s",
                 (limit, offset),
             )
         rows: list[dict[str, Any]] = cur.fetchall()  # type: ignore[assignment]
@@ -216,12 +224,20 @@ def get_profile_by_name(
         return cur.fetchone()  # type: ignore[return-value]
 
 
+_PROFILE_SORT_COLS = {"id", "name", "rank", "points", "disconnects", "seconds_played"}
+
+
 def browse_profiles(
     conn: pymysql.connections.Connection,
     offset: int = 0,
     limit: int = 50,
     query: str = "",
+    sort: str = "rank",
+    direction: str = "asc",
 ) -> tuple[int, list[dict[str, Any]]]:
+    if sort not in _PROFILE_SORT_COLS:
+        sort = "rank"
+    order = f"ORDER BY {sort} {'DESC' if direction.lower() == 'desc' else 'ASC'}"
     with conn.cursor() as cur:
         if query:
             pattern = f"%{query}%"
@@ -232,7 +248,7 @@ def browse_profiles(
             total: int = cur.fetchone()["n"]  # type: ignore[index]
             cur.execute(
                 f"SELECT {_PROFILE_COLS} FROM profiles WHERE deleted = 0 AND name LIKE %s "
-                "ORDER BY name LIMIT %s OFFSET %s",
+                f"{order} LIMIT %s OFFSET %s",
                 (pattern, limit, offset),
             )
         else:
@@ -240,7 +256,7 @@ def browse_profiles(
             total = cur.fetchone()["n"]  # type: ignore[index]
             cur.execute(
                 f"SELECT {_PROFILE_COLS} FROM profiles WHERE deleted = 0 "
-                "ORDER BY name LIMIT %s OFFSET %s",
+                f"{order} LIMIT %s OFFSET %s",
                 (limit, offset),
             )
         rows: list[dict[str, Any]] = cur.fetchall()  # type: ignore[assignment]
