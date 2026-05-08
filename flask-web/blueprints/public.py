@@ -463,7 +463,7 @@ def we9_ranking():
         v = request.form.get(key, "")
         return int(v) if v.isdigit() else default
 
-    if _int_post("pid", 0) != 0:
+    if _int_post("pid", -1) != 0:
         return current_app.response_class("", mimetype="text/html")
 
     raw_division = _int_post("division", 5)
