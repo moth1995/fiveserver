@@ -171,7 +171,7 @@ function initCarousel() {
     var rows = matches.map(function (m) {
       return "<tr>" +
         "<td>" + escHtml(m.home_profile || "?") + "</td>" +
-        "<td class='score'>" + escHtml(m.score || "0:0") + "</td>" +
+        "<td class='score'>" + escHtml(m.home_score !== undefined ? m.home_score : 0) + "&ndash;" + escHtml(m.away_score !== undefined ? m.away_score : 0) + "</td>" +
         "<td>" + escHtml(m.away_profile || "?") + "</td>" +
         "<td class='meta'>" + escHtml(m.lobby || "") + " · " + (m.match_time || 0) + " min</td>" +
         "</tr>";

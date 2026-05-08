@@ -130,7 +130,7 @@ function openMatches(btn) {
   } else {
     body.innerHTML = matches.map(function(m) {
       return '<div class="match-card">' +
-        '<div class="score">' + (m.score || '0:0') + '</div>' +
+        '<div class="score">' + (m.home_score !== undefined ? m.home_score + '&ndash;' + m.away_score : '0&ndash;0') + '</div>' +
         '<div class="profiles">' +
           '<span>' + (m.home_profile || 'Unknown') + '</span>' +
           '<span>' + (m.away_profile || 'Unknown') + '</span>' +
