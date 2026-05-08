@@ -11,7 +11,7 @@ import os
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import captcha as _captcha
@@ -415,19 +415,64 @@ def db_updates_redirect(filename: str):
 # ---------------------------------------------------------------------------
 
 
-def _generate_ranking_html(conn: Any) -> str:
-    rows = get_leaderboard(conn, 0, 100)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    lines = [f"general,{now}"]
-    for i, r in enumerate(rows, 1):
-        lines.append(f"{i},0,{r['name']},{r['points']},0,0,0,0,0,0,0")
+_ORDER_BY_MAP: dict[int, tuple[str, str]] = {
+    0: ("rank", "ASC"),
+    1: ("games", "DESC"),
+    2: ("wins", "DESC"),
+    3: ("draws", "DESC"),
+    4: ("losses", "DESC"),
+    5: ("best", "DESC"),
+}
+
+
+def _generate_ranking_html(
+    conn: Any, division: int | None, order_by: int, offset: int, limit: int
+) -> str:
+    sort, direction = _ORDER_BY_MAP.get(order_by, ("rank", "ASC"))
+    rows = get_leaderboard(
+        conn, offset, limit, sort=sort, direction=direction, division=division
+    )
+    total = count_leaderboard(conn, division)
+    now = (datetime.now(timezone.utc) + timedelta(hours=6)).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    lines = [
+        "general",
+        f"{len(rows)}/{total}",
+        now,
+        "0,0,0,0",
+        "0,0,0",
+        "0,0,0",
+        "0,0,0",
+        "0,0,0",
+        "0,0,0",
+        "0,0,0,0,0",
+    ]
+    for r in rows:
+        lines.append(
+            f"{r['rank']},{r['id']},{r['name']},{r['points']},"
+            f"{r['games']},{r['wins']},{r['draws']},{r['losses']},{r['best']},{r['division']}"
+        )
     return "\n".join(lines)
 
 
-@public_bp.route("/pes5ec/ranking/we9getrank.html")
-@public_bp.route("/we9lek_pc/ranking/we9getrank.html")
+@public_bp.route("/pes5ec/ranking/we9getrank.html", methods=["POST"])
+@public_bp.route("/we9lek_pc/ranking/we9getrank.html", methods=["POST"])
 def we9_ranking():
-    content = _generate_ranking_html(get_db())
+    def _int_post(key: str, default: int) -> int:
+        v = request.form.get(key, "")
+        return int(v) if v.isdigit() else default
+
+    if _int_post("pid", 0) != 0:
+        return current_app.response_class("", mimetype="text/html")
+
+    raw_division = _int_post("division", 5)
+    division = raw_division if 0 <= raw_division <= 4 else None
+    order_by = _int_post("type", 0)
+    offset = _int_post("from", 0)
+    limit = _int_post("records", 100)
+
+    content = _generate_ranking_html(get_db(), division, order_by, offset, limit)
     return current_app.response_class(content, mimetype="text/html")
 
 
