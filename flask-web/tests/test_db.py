@@ -140,7 +140,13 @@ class TestGetProfileStats(unittest.TestCase):
         conn = _make_conn()
         cursor = conn.cursor().__enter__()
         cursor.fetchone.side_effect = [
-            {"wins": 5, "losses": 2, "draws": 1, "goals_for": 13, "goals_against": 6},  # aggregation
+            {
+                "wins": 5,
+                "losses": 2,
+                "draws": 1,
+                "goals_for": 13,
+                "goals_against": 6,
+            },  # aggregation
             {"wins": 3, "best": 5},  # streak
         ]
         stats = db.get_profile_stats(conn, 1)

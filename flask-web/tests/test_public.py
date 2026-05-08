@@ -331,7 +331,9 @@ class TestPublicRoutes(unittest.TestCase):
                 get_leaderboard=MagicMock(return_value=[_minimal_leaderboard_row()])
             ),
         ):
-            resp = self.client.post("/pes5ec/ranking/we9getrank.html", data={"pid": "0"})
+            resp = self.client.post(
+                "/pes5ec/ranking/we9getrank.html", data={"pid": "0"}
+            )
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"general\n", resp.data)
 
@@ -342,7 +344,9 @@ class TestPublicRoutes(unittest.TestCase):
                 get_leaderboard=MagicMock(return_value=[_minimal_leaderboard_row()])
             ),
         ):
-            resp = self.client.post("/we9lek_pc/ranking/we9getrank.html", data={"pid": "0"})
+            resp = self.client.post(
+                "/we9lek_pc/ranking/we9getrank.html", data={"pid": "0"}
+            )
         self.assertEqual(resp.status_code, 200)
         self.assertIn(b"general\n", resp.data)
 
