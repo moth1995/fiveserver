@@ -153,7 +153,7 @@ function onPresetChange(sel) {
 {% if top_online %}
 <div class="chart-section" style="margin-top:24px;">
   <h2>Most Time Online <span style="font-size:.8rem;font-weight:400;color:#64748b;">(all-time)</span></h2>
-  {% set online_max = top_online[0].hours if top_online else 1 %}
+  {% set online_max = (top_online[0].hours if top_online else 1) or 1 %}
   <div class="hbar-chart">
     {% for u in top_online %}
     <div class="hbar-row">

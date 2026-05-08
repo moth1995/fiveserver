@@ -64,8 +64,8 @@
   <p><strong>User ID:</strong> <a href="/admin/users/{{ profile.user_id }}">{{ profile.user_id }}</a></p>
   <p><strong>Fav Team ID:</strong> {{ profile.fav_team or '—' }}</p>
   <p><strong>Fav Player ID:</strong>
-    {%- if profile.fav_player %}
-      {{ profile.fav_player & 0xFFFF }} (from team {{ (profile.fav_player >> 16) & 0xFFFF }})
+    {%- if fav_player_id is not none %}
+      {{ fav_player_id }} (from team {{ fav_player_team }})
     {%- else %}—{% endif %}
   </p>
   <p><strong>Last Updated:</strong> {{ profile.updated_on or '—' }}</p>
