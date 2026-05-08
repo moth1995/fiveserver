@@ -8,7 +8,6 @@ import pymysql.cursors
 
 from flask import g, current_app
 
-
 # ---------------------------------------------------------------------------
 # Connection management
 # ---------------------------------------------------------------------------
@@ -468,3 +467,181 @@ def stats_top_online_users(
             (limit,),
         )
         return cur.fetchall()  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Public site queries  (requires sql/views.sql applied)
+# ---------------------------------------------------------------------------
+
+_LEADERBOARD_SORT_COLS: frozenset[str] = frozenset(
+    {
+        "name",
+        "points",
+        "seconds_played",
+        "rank",
+        "games",
+        "wins",
+        "draws",
+        "losses",
+        "best",
+        "division",
+    }
+)
+_MATCH_SORT_COLS: frozenset[str] = frozenset(
+    {"id", "played_on", "score_home", "score_away"}
+)
+
+
+def get_leaderboard(
+    conn: pymysql.connections.Connection,
+    offset: int,
+    limit: int,
+    sort: str = "points",
+    direction: str = "desc",
+    division: int | None = None,
+) -> list[dict[str, Any]]:
+    """Return rows from v_leaderboard with allowlist-validated sort and optional division filter."""
+    col = sort if sort in _LEADERBOARD_SORT_COLS else "points"
+    dir_ = "ASC" if direction.lower() == "asc" else "DESC"
+    with conn.cursor() as cur:
+        if division is not None:
+            cur.execute(
+                f"SELECT rank, id, name, points, seconds_played, games, wins, draws, losses, best, division "
+                f"FROM v_leaderboard WHERE division = %s ORDER BY {col} {dir_} LIMIT %s OFFSET %s",
+                (division, limit, offset),
+            )
+        else:
+            cur.execute(
+                f"SELECT rank, id, name, points, seconds_played, games, wins, draws, losses, best, division "
+                f"FROM v_leaderboard ORDER BY {col} {dir_} LIMIT %s OFFSET %s",
+                (limit, offset),
+            )
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def count_leaderboard(
+    conn: pymysql.connections.Connection, division: int | None = None
+) -> int:
+    """Count leaderboard rows, optionally filtered by division."""
+    with conn.cursor() as cur:
+        if division is not None:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM v_leaderboard WHERE division = %s",
+                (division,),
+            )
+        else:
+            cur.execute("SELECT COUNT(*) AS n FROM profiles WHERE deleted = 0")
+        return int(cur.fetchone()["n"])  # type: ignore[index]
+
+
+def _fetch_all_matches(
+    conn: pymysql.connections.Connection,
+    offset: int,
+    limit: int,
+    sort: str,
+    direction: str,
+) -> list[dict[str, Any]]:
+    col = sort if sort in _MATCH_SORT_COLS else "id"
+    dir_ = "ASC" if direction.lower() == "asc" else "DESC"
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM v_match_detail ORDER BY {col} {dir_} LIMIT %s OFFSET %s",
+            (limit, offset),
+        )
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def _fetch_profile_matches(
+    conn: pymysql.connections.Connection,
+    profile_id: int,
+    offset: int,
+    limit: int,
+    sort: str,
+    direction: str,
+) -> list[dict[str, Any]]:
+    col = sort if sort in _MATCH_SORT_COLS else "id"
+    dir_ = "ASC" if direction.lower() == "asc" else "DESC"
+    with conn.cursor() as cur:
+        cur.execute(
+            f"SELECT * FROM v_match_detail "
+            f"WHERE profile_id_home = %s OR profile_id_away = %s "
+            f"ORDER BY {col} {dir_} LIMIT %s OFFSET %s",
+            (profile_id, profile_id, limit, offset),
+        )
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def get_public_matches(
+    conn: pymysql.connections.Connection,
+    offset: int,
+    limit: int,
+    profile_id: int | None = None,
+    sort: str = "id",
+    direction: str = "desc",
+) -> list[dict[str, Any]]:
+    """Return paginated matches from v_match_detail, optionally filtered by profile."""
+    if profile_id is None:
+        return _fetch_all_matches(conn, offset, limit, sort, direction)
+    return _fetch_profile_matches(conn, profile_id, offset, limit, sort, direction)
+
+
+def count_public_matches(
+    conn: pymysql.connections.Connection, profile_id: int | None = None
+) -> int:
+    """Count total matches, optionally filtered by profile."""
+    with conn.cursor() as cur:
+        if profile_id is None:
+            cur.execute("SELECT COUNT(*) AS n FROM matches")
+        else:
+            cur.execute(
+                "SELECT COUNT(*) AS n FROM matches "
+                "WHERE profile_id_home = %s OR profile_id_away = %s",
+                (profile_id, profile_id),
+            )
+        return int(cur.fetchone()["n"])  # type: ignore[index]
+
+
+def search_profiles(
+    conn: pymysql.connections.Connection, term: str
+) -> list[dict[str, Any]]:
+    """Return up to 10 non-deleted profiles whose name starts with term."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, name FROM profiles WHERE deleted = 0 AND name LIKE %s LIMIT 10",
+            (term + "%",),
+        )
+        return cur.fetchall()  # type: ignore[return-value]
+
+
+def get_profile_with_stats(
+    conn: pymysql.connections.Connection, name: str
+) -> dict[str, Any] | None:
+    """Single-query profile + v_profile_stats + streaks join for the public profile page."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT p.id, p.name, p.points, p.rank, p.seconds_played, "
+            "COALESCE(ps.games, 0) AS games, "
+            "COALESCE(ps.wins, 0) AS wins, "
+            "COALESCE(ps.draws, 0) AS draws, "
+            "COALESCE(ps.losses, 0) AS losses, "
+            "COALESCE(ps.goals_for, 0) AS goals_for, "
+            "COALESCE(ps.goals_against, 0) AS goals_against, "
+            "COALESCE(s.wins, 0) AS streak, "
+            "COALESCE(s.best, 0) AS best_streak, "
+            "CASE WHEN p.points < 250 THEN 0 "
+            "     WHEN p.points < 450 THEN 1 "
+            "     WHEN p.points < 600 THEN 2 "
+            "     WHEN p.points < 750 THEN 3 "
+            "     ELSE 4 END AS division "
+            "FROM profiles p "
+            "LEFT JOIN v_profile_stats ps ON ps.id = p.id "
+            "LEFT JOIN streaks s ON s.profile_id = p.id "
+            "WHERE p.name = %s AND p.deleted = 0",
+            (name,),
+        )
+        row: dict[str, Any] | None = cur.fetchone()  # type: ignore[assignment]
+    if row is None:
+        return None
+    games = row["games"]
+    row["win_pct"] = round(row["wins"] / games * 100, 1) if games else 0.0
+    return row
