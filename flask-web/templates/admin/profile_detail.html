@@ -2,22 +2,61 @@
 {% block title %}Profile: {{ profile.name or "(empty)" }}{% endblock %}
 {% block body %}
 
-<div class="cards">
-  <div class="card"><div class="card-value">{{ profile.rank }}</div><div class="card-label">Rank</div></div>
-  <div class="card"><div class="card-value">{{ profile.points }}</div><div class="card-label">Points</div></div>
-  <div class="card"><div class="card-value">{{ stats.wins }}</div><div class="card-label">Wins</div></div>
-  <div class="card"><div class="card-value">{{ stats.losses }}</div><div class="card-label">Losses</div></div>
-  <div class="card"><div class="card-value">{{ stats.draws }}</div><div class="card-label">Draws</div></div>
-  <div class="card"><div class="card-value">{{ stats.win_pct }}%</div><div class="card-label">Win %</div></div>
-  <div class="card"><div class="card-value">{{ stats.goals_for }}</div><div class="card-label">Goals For</div></div>
-  <div class="card"><div class="card-value">{{ stats.goals_against }}</div><div class="card-label">Goals Against</div></div>
-  <div class="card"><div class="card-value">{{ stats.streak }}</div><div class="card-label">Win Streak</div></div>
-  <div class="card"><div class="card-value">{{ stats.best_streak }}</div><div class="card-label">Best Streak</div></div>
-  <div class="card">
-    <div class="card-value">{{ (profile.seconds_played // 3600) }}h</div>
-    <div class="card-label">Play Time</div>
+<div class="profile-section">
+  <div class="profile-section-header">
+    <h2 class="profile-section-name">{{ profile.name or "(empty)" }}</h2>
   </div>
-  <div class="card"><div class="card-value">{{ profile.disconnects }}</div><div class="card-label">Disconnects</div></div>
+
+  <div class="stats-grid">
+    <div class="stat-cell">
+      <span class="stat-label">Rank</span>
+      <span class="stat-value">#{{ profile.rank }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Points</span>
+      <span class="stat-value">{{ profile.points }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Wins</span>
+      <span class="stat-value">{{ stats.wins }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Losses</span>
+      <span class="stat-value">{{ stats.losses }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Draws</span>
+      <span class="stat-value">{{ stats.draws }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Win %</span>
+      <span class="stat-value">{{ stats.win_pct }}%</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Goals For</span>
+      <span class="stat-value">{{ stats.goals_for }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Goals Against</span>
+      <span class="stat-value">{{ stats.goals_against }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Win Streak</span>
+      <span class="stat-value">{{ stats.streak }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Best Streak</span>
+      <span class="stat-value">{{ stats.best_streak }}</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Play Time</span>
+      <span class="stat-value">{{ (profile.seconds_played // 3600) }}h</span>
+    </div>
+    <div class="stat-cell">
+      <span class="stat-label">Disconnects</span>
+      <span class="stat-value">{{ profile.disconnects }}</span>
+    </div>
+  </div>
 </div>
 
 <div class="info-box">

@@ -3,7 +3,7 @@
 {% block body %}
 
 <form class="search-row" method="GET" action="">
-  <input type="text" name="q" value="{{ query }}" placeholder="Search by username...">
+  <input type="text" name="q" value="{{ query }}" placeholder="Search by {% if profiles_mode %}name{% else %}username{% endif %}...">
   <button class="btn btn-secondary" type="submit">Search</button>
   {% if query %}<a class="btn btn-secondary" href="?">Clear</a>{% endif %}
 </form>
@@ -12,7 +12,21 @@
 <div class="table-wrap">
 <table>
   <thead><tr>
-    <th>ID</th><th>Username</th><th>Serial</th><th>Status</th><th>Total Online</th><th>Updated</th><th>Actions</th>
+    <th class="sortable {% if sort == 'id' %}sort-active{% endif %}" data-sort="id">
+      ID {% if sort == 'id' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'username' %}sort-active{% endif %}" data-sort="username">
+      Username {% if sort == 'username' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th>Serial</th>
+    <th>Status</th>
+    <th class="sortable {% if sort == 'total_online_seconds' %}sort-active{% endif %}" data-sort="total_online_seconds">
+      Total Online {% if sort == 'total_online_seconds' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'updated_on' %}sort-active{% endif %}" data-sort="updated_on">
+      Updated {% if sort == 'updated_on' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th>Actions</th>
   </tr></thead>
   <tbody>
   {% for u in users %}
@@ -48,7 +62,7 @@
     </td>
   </tr>
   {% else %}
-  <tr><td colspan="7" style="color:#64748b;">No users found.</td></tr>
+  <tr><td colspan="7" style="color:var(--adm-muted);">No users found.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -57,7 +71,24 @@
 <div class="table-wrap">
 <table>
   <thead><tr>
-    <th>ID</th><th>Name</th><th>Rank</th><th>Points</th><th>Disconnects</th><th>Play Time</th>
+    <th class="sortable {% if sort == 'id' %}sort-active{% endif %}" data-sort="id">
+      ID {% if sort == 'id' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'name' %}sort-active{% endif %}" data-sort="name">
+      Name {% if sort == 'name' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'rank' %}sort-active{% endif %}" data-sort="rank">
+      Rank {% if sort == 'rank' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'points' %}sort-active{% endif %}" data-sort="points">
+      Points {% if sort == 'points' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'disconnects' %}sort-active{% endif %}" data-sort="disconnects">
+      Disconnects {% if sort == 'disconnects' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
+    <th class="sortable {% if sort == 'seconds_played' %}sort-active{% endif %}" data-sort="seconds_played">
+      Play Time {% if sort == 'seconds_played' %}{{ '↑' if direction == 'asc' else '↓' }}{% else %}↕{% endif %}
+    </th>
   </tr></thead>
   <tbody>
   {% for p in profiles %}
@@ -70,7 +101,7 @@
     <td>{{ (p.seconds_played // 3600) }}h {{ ((p.seconds_played % 3600) // 60) }}m</td>
   </tr>
   {% else %}
-  <tr><td colspan="6" style="color:#64748b;">No profiles found.</td></tr>
+  <tr><td colspan="6" style="color:var(--adm-muted);">No profiles found.</td></tr>
   {% endfor %}
   </tbody>
 </table>
@@ -79,11 +110,11 @@
 
 <div class="pagination">
   {% if offset > 0 %}
-  <a class="btn btn-secondary btn-sm" href="?offset={{ [0, offset - limit] | max }}&limit={{ limit }}&q={{ query }}">&larr; Previous</a>
+  <a class="btn btn-secondary btn-sm" href="?offset={{ [0, offset - limit] | max }}&limit={{ limit }}&q={{ query }}&sort={{ sort }}&dir={{ direction }}">&larr; Previous</a>
   {% endif %}
   <span>Showing {{ offset + 1 }}–{{ offset + (users | length if not profiles_mode else profiles | length) }} of {{ total }}</span>
   {% if offset + limit < total %}
-  <a class="btn btn-secondary btn-sm" href="?offset={{ offset + limit }}&limit={{ limit }}&q={{ query }}">Next &rarr;</a>
+  <a class="btn btn-secondary btn-sm" href="?offset={{ offset + limit }}&limit={{ limit }}&q={{ query }}&sort={{ sort }}&dir={{ direction }}">Next &rarr;</a>
   {% endif %}
 </div>
 

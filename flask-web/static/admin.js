@@ -14,7 +14,26 @@ function applyTheme(pref) {
   });
 }
 
+/* ── Sortable table headers ─────────────────────────────── */
+function initSortableHeaders() {
+  document.querySelectorAll("th.sortable").forEach(function (th) {
+    th.addEventListener("click", function () {
+      var col = th.dataset.sort;
+      if (!col) return;
+      var url = new URL(window.location.href);
+      var currentSort = url.searchParams.get("sort");
+      var currentDir  = url.searchParams.get("dir") || "asc";
+      var nextDir = (currentSort === col && currentDir === "asc") ? "desc" : "asc";
+      url.searchParams.set("sort", col);
+      url.searchParams.set("dir", nextDir);
+      url.searchParams.set("offset", "0");
+      window.location.href = url.toString();
+    });
+  });
+}
+
 document.addEventListener("DOMContentLoaded", function () {
+  initSortableHeaders();
   var stored = localStorage.getItem("theme") || "auto";
   applyTheme(stored === "auto" ? null : stored);
   document.querySelectorAll(".theme-btn").forEach(function (b) {

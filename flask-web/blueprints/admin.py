@@ -252,8 +252,12 @@ def users() -> str:
     offset: int = int(request.args.get("offset", 0))
     limit: int = int(request.args.get("limit", 50))
     search: str | None = request.args.get("q") or None
+    sort: str = request.args.get("sort", "id")
+    direction: str = request.args.get("dir", "asc")
     conn = get_db()
-    total, rows = browse_users(conn, offset=offset, limit=limit, search=search)
+    total, rows = browse_users(
+        conn, offset=offset, limit=limit, search=search, sort=sort, direction=direction
+    )
     return render_template(
         "admin/users.html",
         users=rows,
@@ -261,6 +265,8 @@ def users() -> str:
         limit=limit,
         total=total,
         query=search or "",
+        sort=sort,
+        direction=direction,
     )
 
 
@@ -284,8 +290,12 @@ def profiles() -> str:
     offset: int = int(request.args.get("offset", 0))
     limit: int = int(request.args.get("limit", 50))
     query: str = request.args.get("q", "").strip()
+    sort: str = request.args.get("sort", "rank")
+    direction: str = request.args.get("dir", "asc")
     conn = get_db()
-    total, rows = browse_profiles(conn, offset=offset, limit=limit, query=query)
+    total, rows = browse_profiles(
+        conn, offset=offset, limit=limit, query=query, sort=sort, direction=direction
+    )
     return render_template(
         "admin/users.html",
         users=[],
@@ -295,6 +305,8 @@ def profiles() -> str:
         total=total,
         query=query,
         profiles_mode=True,
+        sort=sort,
+        direction=direction,
     )
 
 
