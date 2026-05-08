@@ -43,8 +43,7 @@
     <h2>Greeting</h2>
     <div class="form-row" style="align-items:flex-start;">
       <label for="greeting" style="padding-top:6px;">Message</label>
-      <textarea id="greeting" name="greeting" rows="6"
-                style="width:420px;font-family:monospace;font-size:.85rem;">{{ greeting }}</textarea>
+      <textarea id="greeting" name="greeting" rows="6" class="form-textarea" style="width:420px;">{{ greeting }}</textarea>
     </div>
     <p style="color:#64748b;font-size:.8rem;margin-top:4px;">Use \n for line breaks.</p>
   </div>
@@ -104,8 +103,7 @@
     <h2>Chat</h2>
     <div class="form-row" style="align-items:flex-start;">
       <label for="banned_words" style="padding-top:6px;">Banned Words</label>
-      <textarea id="banned_words" name="banned_words" rows="5"
-                style="width:280px;font-family:monospace;font-size:.85rem;"
+      <textarea id="banned_words" name="banned_words" rows="5" class="form-textarea" style="width:280px;"
                 placeholder="One word per line">{{ banned_words }}</textarea>
     </div>
   </div>

@@ -958,6 +958,12 @@ a:hover { text-decoration: underline; }
   --muted:    #475569;
 }
 
+[data-theme="light"] .badge-1  { background: #fef3c7; color: #92400e; }
+[data-theme="light"] .badge-2  { background: #e2e8f0; color: #374151; }
+[data-theme="light"] .badge-3a { background: #ede9fe; color: #5b21b6; }
+[data-theme="light"] .badge-3b { background: #faf5ff; color: #7c3aed; }
+[data-theme="light"] .badge-a  { background: #f1f5f9; color: #4b5563; }
+
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
     --bg:       #f0f4f8;
@@ -968,6 +974,11 @@ a:hover { text-decoration: underline; }
     --text:     #1e2a38;
     --muted:    #475569;
   }
+  :root:not([data-theme="dark"]) .badge-1  { background: #fef3c7; color: #92400e; }
+  :root:not([data-theme="dark"]) .badge-2  { background: #e2e8f0; color: #374151; }
+  :root:not([data-theme="dark"]) .badge-3a { background: #ede9fe; color: #5b21b6; }
+  :root:not([data-theme="dark"]) .badge-3b { background: #faf5ff; color: #7c3aed; }
+  :root:not([data-theme="dark"]) .badge-a  { background: #f1f5f9; color: #4b5563; }
 }
 
 /* ── Theme toggle ─────────────────────────────────────────── */
