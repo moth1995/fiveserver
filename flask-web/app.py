@@ -77,6 +77,13 @@ def create_app(
     _default_secret = cfg.get("FlaskSecretKey", secrets.token_hex(32))
     app.secret_key = os.environ.get("FLASK_SECRET", _default_secret)
 
+    # Site metadata (optional keys in admin.yaml, shown on public pages)
+    app.config["SITE_NAME"] = cfg.get("SiteName", "Fiveserver")
+    app.config["SITE_ABOUT"] = cfg.get("SiteAbout", "")
+    app.config["CONTACT_EMAIL"] = cfg.get("ContactEmail", "")
+    # SocialLinks: list of {platform: "discord"|"facebook"|"instagram"|"twitter"|"youtube", url: "..."}
+    app.config["SOCIAL_LINKS"] = cfg.get("SocialLinks", [])
+
     # CAPTCHA — provider + keys loaded from environment; disabled when CAPTCHA_PROVIDER is unset
     # Supported providers: google, cloudflare, hcaptcha
     app.config["CAPTCHA_PROVIDER"] = os.environ.get("CAPTCHA_PROVIDER", "")
@@ -97,6 +104,18 @@ def create_app(
             return f"{m}m {s}s"
         return f"{s}s"
 
+    @app.template_filter("format_playtime")
+    def _format_playtime(seconds: int) -> str:
+        seconds = int(seconds)
+        d, rem = divmod(seconds, 86400)
+        h = rem // 3600
+        m = (rem % 3600) // 60
+        if d:
+            return f"{d}d {h}h {m}m"
+        if h:
+            return f"{h}h {m}m"
+        return f"{m}m"
+
     # ------------------------------------------------------------------
     # DB teardown
     # ------------------------------------------------------------------
@@ -105,12 +124,12 @@ def create_app(
     # ------------------------------------------------------------------
     # Blueprints
     # ------------------------------------------------------------------
-    from blueprints.register import register_bp
+    from blueprints.public import public_bp
     from blueprints.admin import admin_bp
     from blueprints.stats import stats_bp
 
-    app.register_blueprint(register_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(stats_bp)
+    app.register_blueprint(public_bp)  # last — owns /
 
     return app
