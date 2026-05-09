@@ -460,8 +460,10 @@ def _generate_ranking_html(
 @public_bp.route("/we9lek_pc/ranking/we9getrank.html", methods=["POST"])
 def we9_ranking():
     def _int_post(key: str, default: int) -> int:
-        v = request.form.get(key, "")
+        v = request.values.get(key, "")
         return int(v) if v.isdigit() else default
+
+    current_app.logger.warning("we9_ranking values: %s", dict(request.values))
 
     if _int_post("pid", -1) != 0:
         return current_app.response_class("", mimetype="text/html")
