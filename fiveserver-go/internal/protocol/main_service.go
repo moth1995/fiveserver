@@ -63,17 +63,10 @@ func handleSendFriendRequest4504(hub *Hub) HandlerFunc {
 			logger.Warnf("[friend] 0x4504: no other player found in room %q", s.User.State.Room.Name)
 			return nil
 		}
-		logger.Infof("[friend] 0x4504: target is %s — looking up session", target.Profile.Name)
-		targetSess, ok := hub.GetSession(target.Profile.Name)
-		if !ok {
-			logger.Warnf("[friend] 0x4504: session not found for %s", target.Profile.Name)
-			return nil
-		}
 		logger.Infof("[friend] 0x4504: sending 0x4506+0x4507 to %s", target.Profile.Name)
-		if err := targetSess.Conn.SendZeros(0x4506, 4); err != nil {
-			return err
-		}
-		return targetSess.Conn.SendZeros(0x4507, 0)
+		sendToUser(hub, target, 0x4506, make([]byte, 4))
+		sendToUser(hub, target, 0x4507, nil)
+		return nil
 	}
 }
 
@@ -90,8 +83,9 @@ func handleFriendRequestResponse4508(hub *Hub) HandlerFunc {
 			logger.Warnf("[friend] 0x4508: no requester found in room %q", s.User.State.Room.Name)
 			return nil
 		}
-		logger.Infof("[friend] 0x4508: sending 0x4509 to requester %s", requester.Profile.Name)
-		sendToUser(hub, requester, 0x4509, make([]byte, 4))
+		logger.Infof("[friend] 0x4508: sending 0x4509 to responder %s, 0x450a to requester %s", s.User.Profile.Name, requester.Profile.Name)
+		sendToUser(hub, s.User, 0x4509, make([]byte, 4))
+		sendToUser(hub, requester, 0x450a, make([]byte, 4))
 		return nil
 	}
 }
