@@ -173,9 +173,12 @@ func handleGetProfiles(hub *Hub, sc *db.StorageController) HandlerFunc {
 		cfg := hub.Config()
 		data := make([]byte, 4) // 4 leading zeros
 
-		for i, p := range s.User.Profiles {
+		for i, rawProfile := range s.User.Profiles {
+			p := rawProfile
 			var games int
-			if cfg.ShowStats && p.ID > 0 {
+			if !cfg.ShowStats {
+				p = pristineProfile(rawProfile)
+			} else if p.ID > 0 {
 				ctx := context.Background()
 				games, _ = db.CountMatchesByProfileID(ctx, sc, p.ID)
 			}
