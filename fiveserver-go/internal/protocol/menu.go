@@ -149,6 +149,7 @@ func handleGetLobbies4200(hub *Hub) HandlerFunc {
 	return func(s *Session, pkt Packet) error {
 		// Store the game version byte so it can be compared in isSameGame (0x4320).
 		if s.User != nil && len(pkt.Data) >= 1 {
+			// Seems to be language?
 			s.User.GameVersion = pkt.Data[0]
 		}
 		lobbies := hub.Lobbies()
@@ -731,10 +732,7 @@ func formatPlayerInfo(u *model.ConnectedUser, roomID int) []byte {
 func formatProfileInfo(p *model.Profile, s *model.Stats, showStats bool) []byte {
 	if !showStats {
 		s = &model.Stats{}
-		p = &model.Profile{
-			ID: p.ID, Name: p.Name,
-			FavPlayer: p.FavPlayer, FavTeam: p.FavTeam, Rank: p.Rank,
-		}
+		p = pristineProfile(p)
 	}
 	b := make([]byte, 0, 57)
 	b = append(b, pack32i(int32(p.ID))...)
@@ -757,6 +755,17 @@ func formatProfileInfo(p *model.Profile, s *model.Stats, showStats bool) []byte 
 	b = append(b, pack32i(int32(p.FavPlayer))...)
 	b = append(b, pack32i(int32(p.Rank))...)
 	return b
+}
+
+func pristineProfile(p *model.Profile) *model.Profile {
+	if p == nil {
+		return &model.Profile{}
+	}
+	return &model.Profile{
+		ID:      p.ID,
+		Ordinal: p.Ordinal,
+		Name:    p.Name,
+	}
 }
 
 // ---- shared send helper -----------------------------------------------------
