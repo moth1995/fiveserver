@@ -154,7 +154,7 @@ func TestFormatProfileInfo_ShowStatsTrue_EncodesAllFields(t *testing.T) {
 	}
 }
 
-func TestFormatProfileInfo_ShowStatsFalse_ZerosStatsAndKeepsFavorites(t *testing.T) {
+func TestFormatProfileInfo_ShowStatsFalse_PristineProfileParity(t *testing.T) {
 	profile := &model.Profile{
 		ID:          11,
 		Name:        "Bravo",
@@ -212,13 +212,13 @@ func TestFormatProfileInfo_ShowStatsFalse_ZerosStatsAndKeepsFavorites(t *testing
 	if goalsAllowed := binary.BigEndian.Uint16(got[45:47]); goalsAllowed != 0 {
 		t.Fatalf("goalsAllowed = %d, want 0 when showStats=false", goalsAllowed)
 	}
-	if favTeam := binary.BigEndian.Uint16(got[47:49]); favTeam != 77 {
-		t.Fatalf("favTeam = %d, want 77", favTeam)
+	if favTeam := binary.BigEndian.Uint16(got[47:49]); favTeam != 0 {
+		t.Fatalf("favTeam = %d, want 0 when showStats=false", favTeam)
 	}
-	if favPlayer := int32(binary.BigEndian.Uint32(got[49:53])); favPlayer != 555 {
-		t.Fatalf("favPlayer = %d, want 555", favPlayer)
+	if favPlayer := int32(binary.BigEndian.Uint32(got[49:53])); favPlayer != 0 {
+		t.Fatalf("favPlayer = %d, want 0 when showStats=false", favPlayer)
 	}
-	if rank := int32(binary.BigEndian.Uint32(got[53:57])); rank != 4 {
-		t.Fatalf("rank = %d, want 4", rank)
+	if rank := int32(binary.BigEndian.Uint32(got[53:57])); rank != 0 {
+		t.Fatalf("rank = %d, want 0 when showStats=false", rank)
 	}
 }

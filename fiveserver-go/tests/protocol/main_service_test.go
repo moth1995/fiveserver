@@ -279,6 +279,43 @@ func TestSelectTeam_Owner_SetsHomeTeam(t *testing.T) {
 	}
 }
 
+func TestSelectTeam_RecreatesMatchAndResetsTransientState(t *testing.T) {
+	hub := mainHub(config.Lobby{Name: "EU"})
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+	s, room, _ := sessionInRoom(hub, 1, "Owner", 0)
+	room.Match = &model.Match{
+		HomeProfileID: 1,
+		AwayProfileID: 2,
+		HomeTeamID:    10,
+		AwayTeamID:    20,
+		ScoreHome:     3,
+		ScoreAway:     2,
+		HomeExit:      byte(1),
+		AwayExit:      byte(1),
+	}
+
+	pktData := make([]byte, 2)
+	binary.BigEndian.PutUint16(pktData, 42)
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4366}, Data: pktData}
+	_ = d.Dispatch(s, pkt)
+
+	if room.Match == nil {
+		t.Fatal("Match should exist")
+	}
+	if room.Match.HomeTeamID != 42 {
+		t.Errorf("HomeTeamID = %d, want 42", room.Match.HomeTeamID)
+	}
+	if room.Match.AwayTeamID != 20 {
+		t.Errorf("AwayTeamID = %d, want 20", room.Match.AwayTeamID)
+	}
+	if room.Match.ScoreHome != 0 || room.Match.ScoreAway != 0 {
+		t.Errorf("score should reset on fresh match, got %d:%d", room.Match.ScoreHome, room.Match.ScoreAway)
+	}
+	if room.Match.HomeExit != nil || room.Match.AwayExit != nil {
+		t.Errorf("exit flags should reset on fresh match, got home=%v away=%v", room.Match.HomeExit, room.Match.AwayExit)
+	}
+}
+
 // ---- 0x4368 goalScored -------------------------------------------------------
 
 func TestGoalScored_HomeGoal_IncrementsScoreHome(t *testing.T) {
@@ -345,6 +382,29 @@ func TestMatchExit_SetsHomeExit(t *testing.T) {
 	}
 	if !found {
 		t.Error("expected 0x4371 response")
+	}
+}
+
+func TestMatchSeriesExit_WithExitFlagsAndCountAsLossDisabled_DoesNotRecord(t *testing.T) {
+	hub := mainHub(config.Lobby{Name: "EU", TypeCode: 0x5f})
+	d := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+	s, room, _ := sessionInRoom(hub, 1, "Home", 0)
+	room.Match = &model.Match{
+		HomeProfileID: 1,
+		AwayProfileID: 2,
+		HomeTeamID:    10,
+		AwayTeamID:    20,
+		ScoreHome:     1,
+		ScoreAway:     0,
+		HomeExit:      byte(1),
+	}
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3087}}
+	if err := d.Dispatch(s, pkt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if room.Match != nil {
+		t.Errorf("room.Match should be cleared after 0x3087, got %+v", room.Match)
 	}
 }
 
@@ -562,5 +622,98 @@ func TestDisconnectPenalty_DisconnectCounterIncremented(t *testing.T) {
 	if sHome.User.Profile.Disconnects != before+1 {
 		t.Errorf("disconnect counter = %d, want %d",
 			sHome.User.Profile.Disconnects, before+1)
+	}
+}
+
+func TestMainOnClose_WithActiveMatch_CountAsLossEnabled_AppliesPenalty(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4100}, Data: []byte{0}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if sHome.OnClose == nil {
+		t.Fatal("expected OnClose to be installed after 0x4100")
+	}
+	before := sHome.User.Profile.Disconnects
+	sHome.OnClose()
+
+	if room.Match == nil {
+		t.Fatal("match should not be nil when CountAsLoss is enabled")
+	}
+	if room.Match.ScoreHome != 0 || room.Match.ScoreAway != 3 {
+		t.Errorf("score after OnClose = %d:%d, want 0:3", room.Match.ScoreHome, room.Match.ScoreAway)
+	}
+	if sHome.User.Profile.Disconnects != before+1 {
+		t.Errorf("disconnect counter = %d, want %d", sHome.User.Profile.Disconnects, before+1)
+	}
+}
+
+func TestMainOnClose_WithActiveMatch_CountAsLossDisabled_DiscardsMatch(t *testing.T) {
+	hub := mainHub(config.Lobby{Name: "EU", TypeCode: 0x5f})
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4100}, Data: []byte{0}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if sHome.OnClose == nil {
+		t.Fatal("expected OnClose to be installed after 0x4100")
+	}
+	sHome.OnClose()
+
+	if room.Match != nil {
+		t.Errorf("match should be discarded on OnClose when CountAsLoss is disabled, got %+v", room.Match)
+	}
+}
+
+func TestMainOnClose_WithNoTeamsSelected_ClearsMatchWithoutPenalty(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
+
+	sHome, _, room := setupMatchInProgress(hub, 0)
+	room.Match.HomeTeamID = 0
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4100}, Data: []byte{0}}
+	_ = d.Dispatch(sHome, pkt)
+
+	if sHome.OnClose == nil {
+		t.Fatal("expected OnClose to be installed after 0x4100")
+	}
+	before := sHome.User.Profile.Disconnects
+	sHome.OnClose()
+
+	if room.Match != nil {
+		t.Errorf("match should be nil when teams were not selected, got %+v", room.Match)
+	}
+	if sHome.User.Profile.Disconnects != before {
+		t.Errorf("disconnect counter = %d, want unchanged %d", sHome.User.Profile.Disconnects, before)
+	}
+}
+
+func TestMainDisconnect_ClearsOnCloseToAvoidDoubleCleanup(t *testing.T) {
+	hub := mainHubWithDC(0, 3)
+	menuDispatcher := protocol.NewMenuDispatcher(hub, nil, "pes5")
+	mainDispatcher := protocol.NewMainServiceDispatcher(hub, nil, "pes5")
+
+	sHome, _, _ := setupMatchInProgress(hub, 0)
+	pkt4100 := protocol.Packet{Header: protocol.Header{ID: 0x4100}, Data: []byte{0}}
+	_ = menuDispatcher.Dispatch(sHome, pkt4100)
+	if sHome.OnClose == nil {
+		t.Fatal("expected OnClose to be installed after 0x4100")
+	}
+
+	before := sHome.User.Profile.Disconnects
+	pktDisconnect := protocol.Packet{Header: protocol.Header{ID: 0x0003}}
+	_ = mainDispatcher.Dispatch(sHome, pktDisconnect)
+
+	if sHome.OnClose != nil {
+		t.Fatal("OnClose should be cleared by explicit disconnect")
+	}
+	if sHome.User.Profile.Disconnects != before+1 {
+		t.Fatalf("disconnect counter after explicit disconnect = %d, want %d", sHome.User.Profile.Disconnects, before+1)
+	}
+	if sHome.OnClose != nil {
+		t.Fatal("OnClose should remain nil")
 	}
 }
