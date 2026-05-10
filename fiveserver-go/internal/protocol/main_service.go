@@ -729,6 +729,13 @@ func handleMatchSeriesExit3087(hub *Hub, sc *db.StorageController) HandlerFunc {
 		logger.Infof("[main] MATCH FINISHED: Team %d vs Team %d — %d:%d",
 			match.HomeTeamID, match.AwayTeamID, match.ScoreHome, match.ScoreAway)
 
+		// Mirror Python PES5 logic: when CountAsLoss is disabled, only record
+		// matches where neither side sent an exit flag.
+		if !hub.Config().Disconnects.CountAsLoss.Enabled &&
+			(match.HomeExit != nil || match.AwayExit != nil) {
+			return nil
+		}
+
 		ctx := context.Background()
 
 		var homeRosterHash, awayRosterHash string
@@ -798,15 +805,21 @@ func handleMainDisconnect(hub *Hub, sc *db.StorageController) HandlerFunc {
 		if s.User != nil && s.User.Profile != nil {
 			logger.Infof("[main] User {%s} disconnected", s.User.Profile.Name)
 		}
-		if s.User != nil && s.User.State != nil {
-			applyDisconnectPenalty(hub, sc, s)
-		}
-		exitLobbyAndNotify(hub, s)
-		if s.User != nil {
-			hub.RemoveSession(s)
-		}
+		s.OnClose = nil
+		cleanupSelectedSessionOnClose(hub, sc, s)
 		return nil
 	}
+}
+
+func cleanupSelectedSessionOnClose(hub *Hub, sc *db.StorageController, s *Session) {
+	if s == nil || s.User == nil {
+		return
+	}
+	if s.User.State != nil && s.User.State.InRoom && s.User.State.Room != nil && s.User.State.Room.Match != nil {
+		applyDisconnectPenalty(hub, sc, s)
+	}
+	exitLobbyAndNotify(hub, s)
+	hub.UserOffline(s)
 }
 
 // applyDisconnectPenalty mirrors Python connectionLost disconnect logic.

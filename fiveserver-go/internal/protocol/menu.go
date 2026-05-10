@@ -66,9 +66,10 @@ func handleDo4100(hub *Hub, sc *db.StorageController) HandlerFunc {
 		// Run full disconnect cleanup when the TCP connection closes (including
 		// forced closes from the admin kick endpoint — those never send 0x0003).
 		s.OnClose = func() {
-			logger.Infof("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
-			exitLobbyAndNotify(hub, s)
-			hub.UserOffline(s)
+			if s.User != nil && s.User.Profile != nil {
+				logger.Infof("[menu] connection closed for {%s} — running cleanup", s.User.Profile.Name)
+			}
+			cleanupSelectedSessionOnClose(hub, sc, s)
 		}
 
 		// [4 zeros][4 bytes profile id][33 fixed capability bytes]
@@ -548,10 +549,7 @@ func handleMenuDisconnect(hub *Hub) HandlerFunc {
 		// Clear OnClose so the serveConn defer does not run cleanup a second time
 		// after this graceful 0x0003 handler already did it.
 		s.OnClose = nil
-		exitLobbyAndNotify(hub, s)
-		if s.User != nil {
-			hub.UserOffline(s)
-		}
+		cleanupSelectedSessionOnClose(hub, nil, s)
 		return nil
 	}
 }
