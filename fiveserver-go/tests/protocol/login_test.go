@@ -9,6 +9,17 @@ import (
 	"github.com/fiveserver/fiveserver-go/internal/protocol"
 )
 
+func loginHubWithShowStats(maxUsers int, showStats bool) *protocol.Hub {
+	return protocol.NewHub(&config.Config{
+		MaxUsers:   maxUsers,
+		ServerName: "Test",
+		ShowStats:  showStats,
+		NetworkServer: config.NetworkServerConfig{
+			LoginService: map[string]int{"pes5": 20102},
+		},
+	})
+}
+
 // ---- helpers ----------------------------------------------------------------
 
 func loginHub(maxUsers int) *protocol.Hub {
@@ -125,6 +136,44 @@ func TestGetProfiles_WithUser_SendsProfileData(t *testing.T) {
 	gotName := string(nameBytes[:7]) // "Ronaldo"
 	if gotName != "Ronaldo" {
 		t.Errorf("entry name = %q, want Ronaldo", gotName)
+	}
+}
+
+func TestGetProfiles_ShowStatsFalse_UsesPristineProfile(t *testing.T) {
+	hub := loginHubWithShowStats(100, false)
+	d := protocol.NewLoginDispatcher(hub, nil, "pes5")
+	s, cap := newCaptureSession(hub)
+
+	s.User = &model.ConnectedUser{
+		User: &model.User{Hash: "abc"},
+		Profiles: []*model.Profile{
+			{ID: 10, Name: "Ronaldo", Ordinal: 0, SecondsPlayed: 999, Points: 700},
+			{ID: 11, Name: "Messi", Ordinal: 1, SecondsPlayed: 555, Points: 250},
+			{ID: 12, Name: "Zidane", Ordinal: 2, SecondsPlayed: 111, Points: 50},
+		},
+	}
+
+	pkt := protocol.Packet{Header: protocol.Header{ID: 0x3010}}
+	if err := d.Dispatch(s, pkt); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+
+	if len(cap.sends) != 1 || cap.sends[0].id != 0x3012 {
+		t.Fatalf("expected 0x3012, got %+v", cap.sends)
+	}
+
+	entry := cap.sends[0].data[4:36]
+	if playTime := int32(binary.BigEndian.Uint32(entry[21:25])); playTime != 0 {
+		t.Fatalf("playTime = %d, want 0 when showStats=false", playTime)
+	}
+	if division := entry[25]; division != 0 {
+		t.Fatalf("division = %d, want 0 when showStats=false", division)
+	}
+	if points := int32(binary.BigEndian.Uint32(entry[26:30])); points != 0 {
+		t.Fatalf("points = %d, want 0 when showStats=false", points)
+	}
+	if games := binary.BigEndian.Uint16(entry[30:32]); games != 0 {
+		t.Fatalf("games = %d, want 0 when showStats=false", games)
 	}
 }
 
