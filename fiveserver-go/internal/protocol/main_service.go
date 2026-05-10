@@ -230,8 +230,16 @@ func handleSelectTeam4366(hub *Hub) HandlerFunc {
 		team := int(binary.BigEndian.Uint16(pkt.Data[0:2]))
 		room := s.User.State.Room
 
-		// Create or update match structure
-		if room.Match == nil {
+		// Python creates a fresh Match on each team selection while carrying
+		// over the known participants/teams from the current series.
+		if room.Match != nil {
+			room.Match = &model.Match{
+				HomeProfileID: room.Match.HomeProfileID,
+				AwayProfileID: room.Match.AwayProfileID,
+				HomeTeamID:    room.Match.HomeTeamID,
+				AwayTeamID:    room.Match.AwayTeamID,
+			}
+		} else {
 			room.Match = &model.Match{}
 		}
 		if room.IsOwner(s.User) {
