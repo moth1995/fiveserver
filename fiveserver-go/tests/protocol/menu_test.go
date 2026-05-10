@@ -413,7 +413,7 @@ func TestSearchPlayers_SendsTwoPackets(t *testing.T) {
 	}
 }
 
-func TestGetInboxMessages_SendsTwoPackets(t *testing.T) {
+func TestGetInboxMessages_EmptyInbox_SendsStartAndEndPackets(t *testing.T) {
 	hub := menuHub(100)
 	d := protocol.NewMenuDispatcher(hub, nil, "pes5")
 	s, cap := newCaptureSession(hub)
@@ -421,8 +421,8 @@ func TestGetInboxMessages_SendsTwoPackets(t *testing.T) {
 	pkt := protocol.Packet{Header: protocol.Header{ID: 0x4780}}
 	_ = d.Dispatch(s, pkt)
 
-	if len(cap.sends) != 2 || cap.sends[0].id != 0x4782 || cap.sends[1].id != 0x4784 {
-		t.Errorf("expected 0x4782+0x4784, got %+v", cap.sends)
+	if len(cap.sends) != 2 || cap.sends[0].id != 0x4782 || cap.sends[1].id != 0x4786 {
+		t.Errorf("expected 0x4782+0x4786 for empty inbox, got %+v", cap.sends)
 	}
 }
 
