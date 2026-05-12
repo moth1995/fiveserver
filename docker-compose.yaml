@@ -1,0 +1,86 @@
+services:
+  fiveserver-db:
+    image: ${DB_IMAGE:-mysql:8}
+    container_name: fiveserver-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: fiveserver
+      MYSQL_USER: fiveserver
+      MYSQL_PASSWORD: we9le
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - fiveserver-db-data:/var/lib/mysql
+    networks:
+      - fiveserver-net
+
+  sixserver-db:
+    image: ${DB_IMAGE:-mysql:8}
+    container_name: sixserver-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: sixserver
+      MYSQL_USER: sixserver
+      MYSQL_PASSWORD: proevo
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - ./sql/schema6.sql:/docker-entrypoint-initdb.d/01-schema6.sql:ro
+      - sixserver-db-data:/var/lib/mysql
+    networks:
+      - sixserver-net
+
+  fiveserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: fiveserver
+    restart: unless-stopped
+    depends_on:
+      - fiveserver-db
+    environment:
+      SVC: fiveserver
+    volumes:
+      - ./etc:/opt/fiveserver/etc
+      - ./log:/opt/fiveserver/log
+      - ./web:/opt/fiveserver/web
+    ports:
+      - "16001:16001"
+      - "18001:18001"
+      - "19501:19501"
+      - "20100-20104:20100-20104"
+      - "8180:8180"
+      # - "8181:8181" # Uncomment if you want to enable the web admin interface for PES 5
+    networks:
+      - fiveserver-net
+
+  sixserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: sixserver
+    restart: unless-stopped
+    depends_on:
+      - sixserver-db
+    environment:
+      SVC: sixserver
+    volumes:
+      - ./etc:/opt/fiveserver/etc
+      - ./log:/opt/fiveserver/log
+      - ./web6:/opt/fiveserver/web6
+    ports:
+      - "10881:10881"
+      - "20200-20203:20200-20203"
+      - "8190:8190"
+      # - "8191:8191" # Uncomment if you want to enable the web admin interface for PES 6
+    networks:
+      - sixserver-net
+
+volumes:
+  fiveserver-db-data:
+  sixserver-db-data:
+
+networks:
+  fiveserver-net:
+    driver: bridge
+  sixserver-net:
+    driver: bridge
