@@ -1,37 +1,54 @@
-FROM ubuntu:focal
-MAINTAINER Anton Jouline <juce66@gmail.com>
+FROM python:3.12-alpine AS builder
 
-ENV DEBIAN_FRONTEND noninteractive
+LABEL maintainer="Anton Jouline <juce66@gmail.com>"
 
-RUN groupadd -g 3066 five && useradd -r -u 3066 -g five five
+ENV FSROOT=/opt/fiveserver \
+    FSENV=/usr/local \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-RUN apt-get update && apt-get install -y \
-  libmysqlclient-dev \
-  python3 python3-venv python3-dev \
-  gcc \
-  make
+WORKDIR ${FSROOT}
 
-ENV FSROOT /opt/fiveserver
-ENV FSENV /opt/fiveserver/fsenv
-ENV SVC fiveserver
+RUN apk add --no-cache --virtual .build-deps \
+    gcc \
+    musl-dev \
+    mariadb-connector-c-dev
 
-RUN mkdir -p $FSROOT
-COPY pip.requirements Makefile $FSROOT/
-RUN cd $FSROOT && make FSENV=$FSENV install
+COPY pip.requirements ./
 
-COPY etc $FSROOT/etc
-COPY lib $FSROOT/lib
-COPY log $FSROOT/log
-COPY sql $FSROOT/sql
-COPY tac $FSROOT/tac
-COPY web $FSROOT/web
-COPY web6 $FSROOT/web6
-COPY docker $FSROOT/docker
-COPY service.sh $FSROOT/
+RUN pip install --upgrade pip wheel \
+    && pip install -r ./pip.requirements
 
-RUN chown -R five:five $FSROOT/log
-RUN chown -R five:five $FSROOT/etc/data
+FROM python:3.12-alpine
 
-USER five
-WORKDIR $FSROOT
-CMD exec $FSROOT/service.sh $SVC runexec
+LABEL maintainer="Anton Jouline <juce66@gmail.com>"
+
+ENV FSROOT=/opt/fiveserver \
+    FSENV=/usr/local \
+    SVC=fiveserver \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR ${FSROOT}
+
+RUN apk add --no-cache \
+    bash \
+    mariadb-connector-c
+
+COPY --from=builder /usr/local /usr/local
+
+COPY etc ./etc
+COPY lib ./lib
+COPY log ./log
+COPY sql ./sql
+COPY tac ./tac
+COPY web ./web
+COPY web6 ./web6
+COPY docker ./docker
+COPY service.sh ./
+
+RUN chmod +x ./service.sh
+
+CMD ["/bin/sh", "-c", "exec \"$FSROOT/service.sh\" \"$SVC\" runexec"]
