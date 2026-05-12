@@ -1,4 +1,4 @@
-FROM python:3.12-alpine AS builder
+FROM python:3.10-alpine AS builder
 
 LABEL maintainer="Anton Jouline <juce66@gmail.com>"
 
@@ -20,7 +20,7 @@ COPY pip.requirements ./
 RUN pip install --upgrade pip wheel \
     && pip install -r ./pip.requirements
 
-FROM python:3.12-alpine
+FROM python:3.10-alpine
 
 LABEL maintainer="Anton Jouline <juce66@gmail.com>"
 
