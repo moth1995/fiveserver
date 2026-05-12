@@ -13,6 +13,11 @@ services:
       - fiveserver-db-data:/var/lib/mysql
     networks:
       - fiveserver-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 20s
+      retries: 10
 
   sixserver-db:
     image: ${DB_IMAGE:-mysql:8}
@@ -28,6 +33,11 @@ services:
       - sixserver-db-data:/var/lib/mysql
     networks:
       - sixserver-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 20s
+      retries: 10
 
   fiveserver:
     build:
@@ -36,7 +46,8 @@ services:
     container_name: fiveserver
     restart: unless-stopped
     depends_on:
-      - fiveserver-db
+      fiveserver-db:
+        condition: service_healthy
     environment:
       SVC: fiveserver
     volumes:
@@ -60,7 +71,8 @@ services:
     container_name: sixserver
     restart: unless-stopped
     depends_on:
-      - sixserver-db
+      sixserver-db:
+        condition: service_healthy
     environment:
       SVC: sixserver
     volumes:
