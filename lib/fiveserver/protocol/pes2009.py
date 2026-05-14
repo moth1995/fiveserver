@@ -62,49 +62,31 @@ class NewsProtocol(pes6.NewsProtocol):
                 gameName = name
                 break
         serverIP = self.factory.configuration.serverIP_wan
+        loginPort = self.factory.serverConfig.NetworkServer["loginService"][gameName]
+        mainPort = self.factory.serverConfig.NetworkServer["mainService"]
+        menuPort = self.factory.serverConfig.NetworkServer["networkMenuService"]
+        numOnline = max(0, self.factory.getNumUsersOnline() - 1)
+        # PES2009 PC expects 6 entries (a=0); binary captures confirm 366 bytes = 6×61
         servers = [
-            (
-                -1,
-                2,
-                "LOGIN",
-                serverIP,
-                self.factory.serverConfig.NetworkServer["loginService"][gameName],
-                0,
-                2,
-            ),
-            (
-                -1,
-                3,
-                self.SERVER_NAME,
-                serverIP,
-                self.factory.serverConfig.NetworkServer["mainService"],
-                max(0, self.factory.getNumUsersOnline() - 1),
-                3,
-            ),
-            (
-                -1,
-                8,
-                "NETWORK_MENU",
-                serverIP,
-                self.factory.serverConfig.NetworkServer["networkMenuService"],
-                0,
-                8,
-            ),
+            (0, 1, "UNK_MENU", serverIP, myport, 0, 1),
+            (0, 2, "LOGIN", serverIP, loginPort, 0, 200),
+            (0, 3, self.SERVER_NAME, serverIP, mainPort, numOnline, 300),
+            (0, 8, "UNK_MENU", serverIP, myport, 0, 803),
+            (0, 8, "UNK_MENU", serverIP, myport, 0, 804),
+            (0, 8, "NETWORK_MENU", serverIP, menuPort, 0, 805),
         ]
         data = b"".join(
-            [
-                b"%s%s%s%s%s%s%s"
-                % (
-                    struct.pack("!i", a),
-                    struct.pack("!i", b),
-                    b"%s%s" % (name.encode("utf-8"), b"\0" * (32 - len(name[:32]))),
-                    b"%s%s" % (ip.encode("utf-8"), b"\0" * (15 - len(ip))),
-                    struct.pack("!H", port),
-                    struct.pack("!H", c),
-                    struct.pack("!H", d),
-                )
-                for a, b, name, ip, port, c, d in servers
-            ]
+            b"%s%s%s%s%s%s%s"
+            % (
+                struct.pack("!i", a),
+                struct.pack("!i", b),
+                name.encode("utf-8") + b"\0" * (32 - len(name[:32])),
+                ip.encode("utf-8") + b"\0" * (15 - len(ip)),
+                struct.pack("!H", port),
+                struct.pack("!H", c),
+                struct.pack("!H", d),
+            )
+            for a, b, name, ip, port, c, d in servers
         )
         self.sendZeros(0x2002, 4)
         self.sendData(0x2003, data)
