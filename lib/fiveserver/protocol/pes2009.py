@@ -11,14 +11,126 @@ from fiveserver.model import user, lobby, util
 from fiveserver import log
 from fiveserver.protocol import pes6
 
+class Packet2202Entry:
+    """
+    PES2009 packet 0x2202: web-server list entry
+    """
 
-def getHomePlayerNames(match):
+    def __init__(
+        self, ordinal: int, url: str, unk00: int, unk01: int, md5_hash: str
+    ) -> None:
+        self.ordinal = ordinal
+        self.url = url
+        self.unk00 = unk00
+        self.unk01 = unk01
+        self.md5_hash = md5_hash
+
+    def to_bytes(self) -> bytes:
+        return (
+            struct.pack("!b", self.ordinal)
+            + util.padWithZeros(self.url, 128)
+            + struct.pack("!H", self.unk00)
+            + struct.pack("!I", self.unk01)
+            + util.padWithZeros(self.md5_hash, 32)
+        )
+
+
+# Static web-server list payloads, verbatim from binary captures.
+_2202_ENTRIES = [
+    Packet2202Entry(
+        0,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesgetrank.html",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        1,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesRankingWeek.html",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        2,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/pc_spec/pc_spec.php",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        3,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download.php",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        4,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download_desc.php",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        5,
+        "https://id.konami.net/quick/selectCountry.jsp",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        6,
+        "https://id.konami.net/login.do",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        7,
+        "https://pes2009web.winning-eleven.net/pes09pc/web/konamiid/auth.php",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        8,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/fdvideo/fdvideo.php",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        9,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_pes_en.txt",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        10,
+        "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_konami_en.txt",
+        0,
+        0,
+        "",
+    ),
+    Packet2202Entry(
+        11,
+        "",
+        0,
+        0,
+        "",
+    ),
+]
+
+
+def getHomePlayerNames(match: lobby.Match6) -> str:
     home_players = [match.teamSelection.home_captain]
     home_players.extend(match.teamSelection.home_more_players)
     return ",".join([x.name for x in home_players])
 
 
-def getAwayPlayerNames(match):
+def getAwayPlayerNames(match: lobby.Match6) -> str:
     away_players = [match.teamSelection.away_captain]
     away_players.extend(match.teamSelection.away_more_players)
     return ",".join([x.name for x in away_players])
@@ -93,8 +205,10 @@ class NewsProtocol(pes6.NewsProtocol):
         self.sendZeros(0x2004, 4)
 
     def getWebServerList_2200(self, pkt):
-        self.sendZeros(0x2201, 4)
-        # self.sendData(0x2202,data) #TODO
+        self.sendData(0x2201, struct.pack("!II", 0, 6))
+        for i in range(0, len(_2202_ENTRIES), 6):
+            batch = _2202_ENTRIES[i : i + 6]
+            self.sendData(0x2202, b"".join(entry.to_bytes() for entry in batch))
         self.sendZeros(0x2203, 4)
 
 
