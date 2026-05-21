@@ -85,6 +85,7 @@ func handleSendFriendRequest4504(hub *Hub) HandlerFunc {
 		}
 		logger.Infof("[friend] 0x4504: sending 0x4506 to %s", target.Profile.Name)
 		sendToUser(hub, target, 0x4506, make([]byte, 4))
+		sendToUser(hub, target, 0x4507, nil)
 		return nil
 	}
 }
