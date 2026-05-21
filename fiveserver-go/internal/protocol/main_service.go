@@ -106,11 +106,11 @@ func handleFriendRequestResponse4508(hub *Hub) HandlerFunc {
 		if accepted {
 			logger.Infof("[friend] 0x4508: sending 0x4509 to responder %s, 0x4507 to requester %s", s.User.Profile.Name, requester.Profile.Name)
 			sendToUser(hub, s.User, 0x4509, make([]byte, 4))
-			sendToUser(hub, requester, 0x450a, make([]byte, 4))
+			sendToUser(hub, requester, 0x4509, make([]byte, 4))
 		} else {
 			logger.Infof("[friend] 0x4508: sending 0x450a to responder %s, 0x4507 to requester %s", s.User.Profile.Name, requester.Profile.Name)
 			sendToUser(hub, s.User, 0x4509, make([]byte, 4))
-			sendToUser(hub, requester, 0x450a, make([]byte, 4))
+			sendToUser(hub, requester, 0x4509, make([]byte, 4))
 		}
 		return nil
 	}
