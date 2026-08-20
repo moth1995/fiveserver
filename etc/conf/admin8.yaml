@@ -1,0 +1,11 @@
+Name: Fiveserver Admin Service Configuration
+Version: 1.0
+
+AdminPort: 8291
+AdminUser: fives
+AdminPassword: fives
+KeysDirectory: ./etc/keys
+
+XslFile: ./web6/style.xsl
+FiveserverWebPort: 8290
+FiveserverLogFile: ./log/eightserver.log
