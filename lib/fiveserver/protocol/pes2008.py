@@ -160,6 +160,65 @@ class NetworkMenuService(pes6.MainService):
             self.sendZeros(0x0004, 4)
             self.transport.loseConnection()
 
+    def do_4100(self, pkt):
+        # PES2008 PC does not follow this with the PES6 4200/4202 lobby
+        # selection.  Its 4100 request already carries both network
+        # endpoints, so place the player in the server's implicit lobby here.
+        result = super().do_4100(pkt)
+        if len(pkt.data) >= 42:
+            state = user.UserState()
+            state.lobbyId = 0
+            # 4100 starts with profile-index:u8 + unknown:u16, followed by
+            # ip1[16], port1:u16be, ip2[16], port2:u16be, and two trailing
+            # fields.  The endpoint block therefore begins at byte 3.
+            state.ip1 = pkt.data[3:19]
+            state.udpPort1 = struct.unpack("!H", pkt.data[19:21])[0]
+            state.ip2 = pkt.data[21:37]
+            state.udpPort2 = struct.unpack("!H", pkt.data[37:39])[0]
+            state.someField = struct.unpack("!H", pkt.data[39:41])[0]
+            state.inRoom = 0
+            state.noLobbyChat = 0
+            state.room = None
+            state.teamId = 0
+            state.spectator = 0
+            self._user.state = state
+            self.factory.getLobbies()[0].enter(self._user, self)
+        return result
+
+    def formatProfileInfo(self, profile, stats):
+        """Serialize the PES2008 PC v1.20 0x4103 profile structure."""
+        if not self.factory.serverConfig.ShowStats:
+            profile = self.makePristineProfile(profile)
+
+        recent_teams = list(stats.teams[:5])
+        return b"%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s" % (
+            struct.pack("!i", profile.id),
+            util.padWithZeros(profile.name, 48),
+            struct.pack("!B", self.factory.ratingMath.getDivision(profile.points)),
+            struct.pack("!i", profile.points),
+            struct.pack("!H", profile.rating),
+            struct.pack("!H", stats.wins + stats.losses + stats.draws),
+            struct.pack("!H", stats.wins),
+            struct.pack("!H", stats.losses),
+            struct.pack("!H", stats.draws),
+            struct.pack("!H", stats.streak_current),
+            struct.pack("!H", stats.streak_best),
+            struct.pack("!H", profile.disconnects),
+            # The client consumes two additional u16 values here. They are
+            # not displayed by the profile UI and their semantics are not yet
+            # known, so keep them deterministic instead of shifting the
+            # following goal counters.
+            b"\0" * 4,
+            struct.pack("!i", stats.goals_scored),
+            struct.pack("!i", stats.goals_allowed),
+            util.padWithZeros((profile.comment or "Fiveserver rules!"), 256),
+            struct.pack("!i", profile.rank),
+            # Two one-byte fields precede the five recent-team ids. PES6 has
+            # a larger medal block here, which PES2008 does not parse.
+            b"\0\0",
+            b"".join(struct.pack("!H", team) for team in recent_teams),
+            b"\xff\xff" * (5 - len(recent_teams)),
+        )
 
 class MainService(NetworkMenuService):
     """
