@@ -104,6 +104,110 @@ class ProfileData(data.ProfileData):
         defer.returnValue((total, results))
 
     @defer.inlineCallbacks
+    def getRanking(self, offset=0, limit=20, division=None,
+                   playedFrom=None, playedTo=None, profileId=None):
+        """Return aggregate ranking rows for the PES2008 web service."""
+        if playedFrom is None:
+            joins = (
+                'LEFT JOIN matches_played mp ON mp.profile_id=p.id '
+                'LEFT JOIN matches m ON m.id=mp.match_id '
+                'LEFT JOIN streaks s ON s.profile_id=p.id ')
+        else:
+            joins = (
+                'JOIN matches_played mp ON mp.profile_id=p.id '
+                'JOIN matches m ON m.id=mp.match_id '
+                'LEFT JOIN streaks s ON s.profile_id=p.id ')
+
+        conditions = ['p.deleted = 0']
+        params = []
+        if playedFrom is not None:
+            conditions.extend(['m.played_on >= %s', 'm.played_on < %s'])
+            params.extend([playedFrom, playedTo])
+
+        thresholds = (250, 450, 600, 750)
+        if division is not None:
+            if division == 0:
+                conditions.append('p.points < %s')
+                params.append(thresholds[0])
+            elif division == 4:
+                conditions.append('p.points >= %s')
+                params.append(thresholds[-1])
+            else:
+                conditions.extend(['p.points >= %s', 'p.points < %s'])
+                params.extend([thresholds[division - 1], thresholds[division]])
+
+        where = ' AND '.join(conditions)
+        if playedFrom is None:
+            countSql = 'SELECT count(p.id) FROM profiles p WHERE ' + where
+        else:
+            countSql = (
+                'SELECT count(DISTINCT p.id) FROM profiles p ' + joins +
+                'WHERE ' + where)
+        countRows = yield self.dbController.dbRead(0, countSql, *params)
+        total = int(countRows[0][0])
+
+        selectSql = (
+            'SELECT p.id,p.name,p.`rank`,p.points,coalesce(s.best,0),'
+            'count(mp.id) AS games,'
+            'coalesce(sum(CASE WHEN '
+            '(mp.home=1 AND m.score_home>m.score_away) OR '
+            '(mp.home=0 AND m.score_home<m.score_away) '
+            'THEN 1 ELSE 0 END),0) AS wins,'
+            'coalesce(sum(CASE WHEN '
+            '(mp.home=1 AND m.score_home<m.score_away) OR '
+            '(mp.home=0 AND m.score_home>m.score_away) '
+            'THEN 1 ELSE 0 END),0) AS losses,'
+            'coalesce(sum(CASE WHEN m.score_home=m.score_away '
+            'THEN 1 ELSE 0 END),0) AS draws '
+            'FROM profiles p ' + joins + 'WHERE ' + where)
+        groupBy = (
+            ' GROUP BY p.id,p.name,p.`rank`,p.points,s.best ')
+        if playedFrom is None:
+            orderBy = (
+                'ORDER BY p.points DESC,p.seconds_played DESC,p.id ASC ')
+        else:
+            orderBy = (
+                'ORDER BY wins DESC,draws DESC,losses ASC,'
+                'p.points DESC,p.id ASC ')
+
+        rows = yield self.dbController.dbRead(
+            0, selectSql + groupBy + orderBy + 'LIMIT %s OFFSET %s',
+            *(params + [limit, offset]))
+
+        def _entry(row, fallbackRank):
+            (entryId, name, storedRank, points, strikeRecord,
+             games, wins, losses, draws) = row
+            if division is None and playedFrom is None and storedRank:
+                rank = int(storedRank)
+            else:
+                rank = fallbackRank
+            return {
+                'rank': rank,
+                'profileId': int(entryId),
+                'name': name,
+                'games': int(games),
+                'wins': int(wins),
+                'losses': int(losses),
+                'draws': int(draws),
+                'strikeRecord': int(strikeRecord),
+                'points': int(points),
+            }
+
+        entries = [
+            _entry(row, offset + index + 1)
+            for index, row in enumerate(rows)]
+
+        playerEntry = None
+        if profileId is not None:
+            playerRows = yield self.dbController.dbRead(
+                0, selectSql + ' AND p.id = %s' + groupBy,
+                *(params + [profileId]))
+            if playerRows:
+                playerEntry = _entry(playerRows[0], int(playerRows[0][2]) or 1)
+
+        defer.returnValue((total, entries, playerEntry))
+
+    @defer.inlineCallbacks
     def store(self, p):
         sql = ('INSERT INTO profiles (id,user_id,ordinal,name,'
                '`rank`,rating,points,disconnects,seconds_played,comment) '

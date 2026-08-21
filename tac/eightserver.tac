@@ -8,14 +8,19 @@ except:
 from twisted.application.internet import TCPServer
 from twisted.application.service import Application
 from twisted.web.server import Site
+from twisted.web import resource, server
 from twisted.internet import reactor
 
 from fiveserver.config import FiveServerConfig, YamlConfig, DatabaseConfig
 from fiveserver.protocol import PacketServiceFactory
 from fiveserver.protocol import pes2008
+from fiveserver.protocol.pes2008_web import (
+    formatEmptyRankingResponse, formatRankingPage, formatRankingResponse,
+    resolveRankingType)
 from fiveserver.register import RegistrationResource
 from fiveserver import storagecontroller, log
 from fiveserver import admin, data6, logic
+from datetime import datetime
 import os
 
 
@@ -61,9 +66,99 @@ for protocol,port in [
     service = TCPServer(port, factory, interface=config.interface)
     service.setServiceParent(application)
 
-# registration web-service
-registrationServer = Site(
-    RegistrationResource(config,fsroot + '/web6'))
+class RankingResource(resource.Resource):
+    """Twisted endpoint used by the PES2008 ranking browser and client."""
+
+    isLeaf = True
+
+    def __init__(self, config):
+        resource.Resource.__init__(self)
+        self.config = config
+
+    def render_GET(self, request):
+        request.setHeader('Content-Type', 'text/html; charset=utf-8')
+        return formatRankingPage()
+
+    def render_POST(self, request):
+        values = {}
+        for name in (b'type', b'from', b'records', b'pid', b'flag'):
+            rawValues = request.args.get(name, [b''])
+            values[name.decode('ascii')] = rawValues[0].decode(
+                'ascii', 'replace')
+        log.msg(
+            'PES2008 ranking query: '
+            'type=%(type)s from=%(from)s records=%(records)s '
+            'pid=%(pid)s flag=%(flag)s' % values)
+
+        try:
+            rankingType = int(values['type'])
+            firstRecord = max(1, int(values['from']))
+            recordCount = max(1, min(20, int(values['records'])))
+            profileId = int(values['pid'])
+        except ValueError:
+            request.setResponseCode(400)
+            request.setHeader('Content-Type', 'text/plain; charset=us-ascii')
+            return formatEmptyRankingResponse()
+
+        now = datetime.now()
+        try:
+            division, playedFrom, playedTo = resolveRankingType(
+                rankingType, now)
+        except ValueError:
+            request.setResponseCode(400)
+            request.setHeader('Content-Type', 'text/plain; charset=us-ascii')
+            return formatEmptyRankingResponse(now)
+
+        result = self.config.profileData.getRanking(
+            firstRecord - 1, recordCount, division,
+            playedFrom, playedTo, profileId)
+
+        def _writeRanking(result):
+            total, entries, playerEntry = result
+            for entry in entries:
+                entry['division'] = self.config.ratingMath.getDivision(
+                    entry['points'])
+            if playerEntry is not None:
+                playerEntry['division'] = self.config.ratingMath.getDivision(
+                    playerEntry['points'])
+            request.setHeader(
+                'Content-Type', 'text/plain; charset=us-ascii')
+            request.write(formatRankingResponse(
+                entries, total, playerEntry, now))
+            request.finish()
+
+        def _rankingFailed(error):
+            log.msg('ERROR: PES2008 ranking query failed: %s' % error.value)
+            request.setResponseCode(500)
+            request.setHeader(
+                'Content-Type', 'text/plain; charset=us-ascii')
+            request.write(formatEmptyRankingResponse(now))
+            request.finish()
+
+        result.addCallback(_writeRanking)
+        result.addErrback(_rankingFailed)
+        return server.NOT_DONE_YET
+
+
+class WebRootResource(RegistrationResource):
+    """Registration root with the PES2008 web endpoints mounted below it."""
+
+    isLeaf = False
+
+    def __init__(self, config, webDir):
+        resource.Resource.__init__(self)
+        RegistrationResource.__init__(self, config, webDir)
+        pes2008Root = resource.Resource()
+        pes2008Root.putChild(b'ranking', RankingResource(config))
+        self.putChild(b'pes2008', pes2008Root)
+
+    def getChild(self, path, request):
+        # Preserve RegistrationResource's legacy catch-all routes.
+        return self
+
+
+# registration and PES2008 ranking web-service
+registrationServer = Site(WebRootResource(config, fsroot + '/web6'))
 service = TCPServer(scfg.WebInterface['port'], registrationServer,
     interface=config.interface)
 service.setServiceParent(application)

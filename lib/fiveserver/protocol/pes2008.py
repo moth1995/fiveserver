@@ -44,6 +44,38 @@ class NewsProtocol(pes6.NewsProtocol):
         super().register()
         self.addHandler(0x2300, self.getNetworkMenuService_2300)
 
+    def getWebServerList_2200(self, pkt):
+        """Send the PES2008 PC ranking-web endpoint table."""
+        server_ip = self.factory.configuration.serverIP_wan
+        web_port = self.factory.serverConfig.WebInterface["port"]
+        ranking_url = "http://%s:%d/pes2008/ranking" % (server_ip, web_port)
+        encoded_url = ranking_url.encode("ascii")
+        if len(encoded_url) > 128:
+            log.msg(
+                "WARNING: PES2008 ranking URL exceeds 128 bytes and will "
+                "be truncated: %s" % ranking_url
+            )
+
+        # 2201 is result:u32be + an as-yet unknown u32be. The original
+        # PES6 implementation used 0x55 for the second field, and PES2008's
+        # parser still consumes both values.
+        self.sendData(0x2201, struct.pack("!II", 0, 0x55))
+
+        # PES2008 PC consumes exactly three records. Each record is a
+        # one-byte URL type followed by a fixed 128-byte URL. Only type 0
+        # has a proven consumer; keep the other slots present but empty.
+        records = (
+            (0, encoded_url),
+            (1, b""),
+            (2, b""),
+        )
+        data = b"".join(
+            struct.pack("!B", url_type) + util.padWithZeros(url, 128)
+            for url_type, url in records
+        )
+        self.sendData(0x2202, data)
+        self.sendZeros(0x2203, 4)
+
     def getNetworkMenuService_2300(self, pkt):
         # PC v1.20 parses this as result:u32be + service-kind:u16be,
         # then resolves that kind against the records received in 0x2003.
