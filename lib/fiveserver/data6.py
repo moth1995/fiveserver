@@ -235,6 +235,52 @@ class MatchData:
         defer.returnValue(teams)
 
     @defer.inlineCallbacks
+    def getLastMatches(self, profileId, numMatches=20):
+        """Return the latest matches with both captains and team data."""
+        numMatches = max(0, min(20, int(numMatches)))
+        sql = (
+            'SELECT m.played_on,m.score_home,m.score_away,'
+            'm.team_id_home,m.team_id_away,'
+            'hp.id,hp.name,hp.points,ap.id,ap.name,ap.points '
+            'FROM matches m '
+            'JOIN matches_played requested '
+            'ON requested.match_id=m.id AND requested.profile_id=%s '
+            'JOIN matches_played hmp '
+            'ON hmp.match_id=m.id AND hmp.home=1 '
+            'JOIN profiles hp ON hp.id=hmp.profile_id '
+            'JOIN matches_played amp '
+            'ON amp.match_id=m.id AND amp.home=0 '
+            'JOIN profiles ap ON ap.id=amp.profile_id '
+            'WHERE hmp.id=(SELECT min(first_home.id) '
+            'FROM matches_played first_home '
+            'WHERE first_home.match_id=m.id AND first_home.home=1) '
+            'AND amp.id=(SELECT min(first_away.id) '
+            'FROM matches_played first_away '
+            'WHERE first_away.match_id=m.id AND first_away.home=0) '
+            'ORDER BY m.played_on DESC,m.id DESC LIMIT %s')
+        rows = yield self.dbController.dbRead(
+            0, sql, profileId, numMatches)
+        matches = []
+        for row in rows:
+            (playedOn, scoreHome, scoreAway, teamHome, teamAway,
+             homeId, homeName, homePoints,
+             awayId, awayName, awayPoints) = row
+            matches.append({
+                'playedOn': playedOn,
+                'scoreHome': int(scoreHome),
+                'scoreAway': int(scoreAway),
+                'teamHome': int(teamHome),
+                'teamAway': int(teamAway),
+                'homeId': int(homeId),
+                'homeName': homeName,
+                'homePoints': int(homePoints),
+                'awayId': int(awayId),
+                'awayName': awayName,
+                'awayPoints': int(awayPoints),
+            })
+        defer.returnValue(matches)
+
+    @defer.inlineCallbacks
     def store(self, match):
         matchId = yield self.dbController.dbWriteInteraction(
             0, self._storeTxn, match)

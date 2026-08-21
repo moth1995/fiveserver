@@ -157,9 +157,76 @@ class NetworkMenuService(pes6.MainService):
 
     def register(self):
         super().register()
+        self.addHandler(0x3070, self.getMatchResults_3070)
         self.addHandler(0x4C00, self.do_4c00)
         self.addHandler(0x4C10, self.do_4c10)
         self.addHandler(0x4C20, self.do_4c20)
+
+    def formatMatchResult(self, match):
+        """Serialize one 129-byte PES2008 PC 0x3072 match record."""
+        played_on = match["playedOn"]
+        if played_on is None:
+            timestamp = 0
+        elif getattr(played_on, "tzinfo", None) is not None:
+            timestamp = int(played_on.timestamp())
+        else:
+            timestamp = int(time.mktime(played_on.timetuple()))
+
+        home_division = self.factory.ratingMath.getDivision(match["homePoints"])
+        away_division = self.factory.ratingMath.getDivision(match["awayPoints"])
+        home_score = max(0, min(0xFF, match["scoreHome"]))
+        away_score = max(0, min(0xFF, match["scoreAway"]))
+
+        # The client parses ids and names as separate two-element arrays,
+        # rather than two interleaved player structures.
+        data = b"".join(
+            (
+                struct.pack("!I", timestamp & 0xFFFFFFFF),
+                struct.pack("!II", match["homeId"], match["awayId"]),
+                util.padWithZeros(match["homeName"], 48),
+                util.padWithZeros(match["awayName"], 48),
+                # Per-player flags. Their exact UI meaning remains unresolved.
+                b"\0\0",
+                struct.pack(
+                    "!HH", match["teamHome"] & 0xFFFF, match["teamAway"] & 0xFFFF
+                ),
+                # The schema stores final totals rather than period breakdowns.
+                # Put the totals in the first score component and keep the
+                # second-half/extra-time/penalty components at zero.
+                struct.pack("!BBBBB", home_score, 0, 0, 0, 0),
+                struct.pack("!BBBBB", away_score, 0, 0, 0, 0),
+                struct.pack("!BB", 4 - home_division, 4 - away_division),
+                # Extra-time, penalties and special-result flags.
+                b"\0\0\0",
+            )
+        )
+        if len(data) != 129:
+            raise ValueError("PES2008 0x3072 record must be 129 bytes")
+        return data
+
+    @defer.inlineCallbacks
+    def getMatchResults_3070(self, pkt):
+        """Return up to 20 stored results for the requested profile id."""
+        if len(pkt.data) < 4:
+            log.msg(
+                "WARNING: PES2008 0x3070 payload is %d bytes; expected 4"
+                % len(pkt.data)
+            )
+            self.sendData(0x3071, struct.pack("!I", 1))
+            self.sendZeros(0x3073, 4)
+            defer.returnValue(None)
+
+        profile_id = struct.unpack("!I", pkt.data[:4])[0]
+        self.sendZeros(0x3071, 4)
+        matches = yield self.factory.matchData.getLastMatches(profile_id, 20)
+        records = [self.formatMatchResult(match) for match in matches]
+
+        # The client parser has a 0x400-byte payload buffer. Seven 129-byte
+        # records fit (903 bytes); eight would overflow it (1032 bytes).
+        for offset in range(0, len(records), 7):
+            self.sendData(0x3072, b"".join(records[offset : offset + 7]))
+        self.sendZeros(0x3073, 4)
+        defer.returnValue(None)
 
     def disconnect_0003(self, pkt):
         # PES2008 waits for the result packet before completing the
