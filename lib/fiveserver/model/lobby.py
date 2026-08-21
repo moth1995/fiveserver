@@ -134,6 +134,11 @@ class Room:
         self.id = 0
         self.name = 'unnamed'
         self.matchTime = 5
+        self.teamScope = 0
+        self.gameMode = 0
+        self.maxPlayers = lobby.maxPlayers if lobby is not None else 4
+        self.inviteLimit = 0
+        self.creationFlag = 0
         self.matchSettings = None
         self.usePassword = False
         self.password = None
