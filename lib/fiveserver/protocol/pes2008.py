@@ -5,9 +5,12 @@ Duplicates the PES6 implementation (fiveserver.protocol.pes6) as-is;
 PES2008 uses the same network protocol as PES6/WE2007.
 """
 
+import binascii
+import re
 import struct
 import time
 
+from Crypto.Cipher import Blowfish
 from twisted.internet import defer
 from fiveserver.model import lobby, user, util
 from fiveserver.protocol import pes6
@@ -153,6 +156,77 @@ class LoginService(pes6.LoginService):
     """
     Login-service for PES2008
     """
+
+    # PES2008 packs the client version at 0x30:0x38 (e.g. b'PC  1.20')
+    # and the real roster/edit-database MD5 checksum immediately after,
+    # at 0x38:0x48. This differs from pes6.RosterHandler's 58:74 slice
+    # (verified live: breakpointed the hash call in FUN_00b03840 and
+    # confirmed the source pointer/length resolve to the loaded roster
+    # database).
+    ROSTER_HASH_START = 0x38
+    ROSTER_HASH_END = 0x48
+    CLIENT_VERSION_START = 0x30
+    CLIENT_VERSION_END = 0x38
+
+    # Fallback used only if ClientVersion.minimum is missing from the
+    # config while ClientVersion.enforce is true.
+    DEFAULT_MINIMUM_VERSION = "1.20"
+
+    def getRosterHash(self, pkt_data):
+        return pkt_data[self.ROSTER_HASH_START : self.ROSTER_HASH_END]
+
+    def getClientVersion(self, pkt_data):
+        return util.stripZeros(
+            pkt_data[self.CLIENT_VERSION_START : self.CLIENT_VERSION_END]
+        )
+
+    def parseVersionTuple(self, version):
+        if isinstance(version, bytes):
+            version = version.decode("ascii", "replace")
+        parts = re.findall(r"\d+", version)
+        return tuple(int(p) for p in parts)
+
+    def checkClientVersion(self, clientVersion):
+        """
+        Verified against a live PES2008.exe: FUN_00bb9ce0 sends the
+        client to pes2008web.winning-eleven.net/.../chkver/ when the
+        server rejects login with result 0xffffff0d (-0xf3) on 0x3004.
+        Controlled by etc/conf/eightserver.yaml's ClientVersion block;
+        disabled (permissive) unless explicitly enabled.
+        """
+        try:
+            enforce = self.factory.serverConfig.ClientVersion["enforce"]
+        except (AttributeError, KeyError):
+            return True
+        if not enforce:
+            return True
+        try:
+            minimum = self.factory.serverConfig.ClientVersion["minimum"]
+        except KeyError:
+            minimum = self.DEFAULT_MINIMUM_VERSION
+        return self.parseVersionTuple(clientVersion) >= self.parseVersionTuple(minimum)
+
+    @defer.inlineCallbacks
+    def authenticate_3003(self, pkt):
+        cipher = Blowfish.new(
+            binascii.a2b_hex(self.factory.cipherKey), Blowfish.MODE_ECB
+        )
+        clientVersion = self.getClientVersion(cipher.decrypt(pkt.data))
+        if not self.checkClientVersion(clientVersion):
+            log.msg(
+                "PES2008 client version too old: got %r, minimum %r. "
+                "Rejecting with 0x3004=0xffffff0d."
+                % (
+                    clientVersion,
+                    self.factory.serverConfig.ClientVersion.get(
+                        "minimum", self.DEFAULT_MINIMUM_VERSION
+                    ),
+                )
+            )
+            self.sendData(0x3004, struct.pack("!I", 0xFFFFFF0D))
+            defer.returnValue(None)
+        yield super().authenticate_3003(pkt)
+        defer.returnValue(None)
 
     def disconnect_0003(self, pkt):
         # PES2008 waits for the result packet before completing the

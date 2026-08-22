@@ -60,6 +60,10 @@ Roster:
     enforceHash: false
     compareHash: true
 
+ClientVersion:
+    enforce: false
+    minimum: "1.20"
+
 ComputeRanksInterval:
     days: 1
     seconds: 0
