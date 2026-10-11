@@ -36,7 +36,7 @@ WebInterface:
     port: 9190
     # HTTPS: auth.php login, EULAs, ranking... (see WebBaseUrl).
     # Create + trust the cert first: python scripts/make_pes2009_cert.py
-    sslPort: 9191
+    sslPort: 9193  # 9191/9192 = admin/stats (admin9.yaml AdminPort)
     #sslKey: etc/keys/pes2009web-key.pem
     #sslCert: etc/keys/pes2009web-cert.pem
 
@@ -46,7 +46,7 @@ WebInterface:
 # port = HTTPS. So with a custom port this must be the sslPort, and the cert
 # must cover this host (IP or name).
 # Unset = Konami's original URLs (hosts-file redirect + ports 80 and 443).
-WebBaseUrl: "https://127.0.0.1:9191"
+WebBaseUrl: "https://127.0.0.1:9193"
 
 Debug:
     false
