@@ -6,6 +6,6 @@ AdminUser: fives
 AdminPassword: fives
 KeysDirectory: ./etc/keys
 
-XslFile: ./web9/style.xsl
+XslFile: ./web6/style.xsl
 FiveserverWebPort: 9190
 FiveserverLogFile: ./log/nineserver.log

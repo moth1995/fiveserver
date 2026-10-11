@@ -1,6 +1,6 @@
 mysqlclient
 PyYAML
-Twisted==20.3.0
+Twisted==21.2.0
 pyOpenSSL
 pycryptodome
 zope.interface

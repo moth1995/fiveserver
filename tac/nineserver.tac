@@ -6,7 +6,10 @@ try:
 except:
     pass
 
-from twisted.application.internet import TCPServer
+from twisted.application.internet import TCPServer, SSLServer
+from twisted.internet.interfaces import IProtocolFactory, ILoggingContext
+from twisted.internet.ssl import DefaultOpenSSLContextFactory
+from zope.interface import implementer_only
 from twisted.application.service import Application
 from twisted.web.server import Site
 from twisted.internet import reactor
@@ -16,8 +19,9 @@ from fiveserver.protocol import PacketServiceFactory
 from fiveserver.protocol import pes2009
 from fiveserver.register import RegistrationResource
 from fiveserver import storagecontroller, log
-from fiveserver import admin, data6, logic
+from fiveserver import admin, data9, logic
 import os
+from urllib.parse import urlsplit
 
 application = Application("NineServer application")
 fsroot = os.environ.get("FSROOT", ".")
@@ -36,9 +40,9 @@ keepAliveManager = storagecontroller.KeepAliveManager(
 )
 keepAliveManager.start()
 
-userData = data6.UserData(storageController)
-profileData = data6.ProfileData(storageController)
-matchData = data6.MatchData(storageController)
+userData = data9.UserData(storageController)
+profileData = data9.ProfileData(storageController)
+matchData = data9.MatchData(storageController)
 profileLogic = logic.ProfileLogic(matchData, profileData)
 config = FiveServerConfig(
     scfg, dbConfig, userData, profileData, matchData, profileLogic
@@ -70,6 +74,36 @@ service = TCPServer(
     scfg.WebInterface["port"], registrationServer, interface=config.interface
 )
 service.setServiceParent(application)
+
+# same site over TLS: the game logs in via https://.../auth.php
+# (cert from scripts/make_pes2009_cert.py, trusted in the Windows Root store)
+@implementer_only(IProtocolFactory, ILoggingContext)
+class Http1Site(Site):
+    # no ALPN: Twisted 21 sets it on the context after creating the TLS
+    # connection, which pyOpenSSL >= 24 rejects. The game only speaks HTTP/1.1.
+    pass
+
+
+# the game uses TLS for every port but 80, whatever the URL scheme says
+webBasePort = urlsplit(getattr(scfg, "WebBaseUrl", "") or "").port
+if webBasePort not in (None, 80, scfg.WebInterface.get("sslPort")):
+    log.msg(
+        "WARNING: WebBaseUrl port %s is not WebInterface.sslPort: the game "
+        "will speak HTTPS to it (only port 80 is plain HTTP)" % webBasePort
+    )
+
+if scfg.WebInterface.get("sslPort"):
+    webTls = DefaultOpenSSLContextFactory(
+        fsroot + "/" + scfg.WebInterface.get("sslKey", "etc/keys/pes2009web-key.pem"),
+        fsroot + "/" + scfg.WebInterface.get("sslCert", "etc/keys/pes2009web-cert.pem"),
+    )
+    service = SSLServer(
+        scfg.WebInterface["sslPort"],
+        Http1Site(registrationServer.resource),
+        webTls,
+        interface=config.interface,
+    )
+    service.setServiceParent(application)
 
 
 class ServerContextFactory:
