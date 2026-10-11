@@ -1,0 +1,7 @@
+# keep local secrets, logs and venvs out of the image (etc/log get mounted)
+.local
+.git
+flask-web
+etc/keys/pes2009web-*.pem
+log/*.log
+log/*.pid

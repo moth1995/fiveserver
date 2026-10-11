@@ -32,7 +32,8 @@ chown -R five:five /opt/five/log
 chown -R five:five /opt/five/etc/data
 
 Modify configuration as desired. At the minimum, you should change
-the admin usernames/passwords in etc/conf/admin.yaml and etc/conf/admin6.yaml
+the admin usernames/passwords in etc/conf/admin.yaml, etc/conf/admin6.yaml
+and etc/conf/admin9.yaml
 
 
 Run
@@ -42,4 +43,31 @@ To create and start new containers:
 
 docker run -d --net=host --name=fiveserver --restart=always -v /opt/five/etc:/opt/fiveserver/etc -v /opt/five/log:/opt/fiveserver/log -e SVC=fiveserver fiveserver
 docker run -d --net=host --name=sixserver --restart=always -v /opt/five/etc:/opt/fiveserver/etc -v /opt/five/log:/opt/fiveserver/log -e SVC=sixserver fiveserver
+docker run -d --net=host --name=nineserver --restart=always -v /opt/five/etc:/opt/fiveserver/etc -v /opt/five/log:/opt/fiveserver/log -e SVC=nineserver fiveserver
 
+
+PES2009 (nineserver)
+~~~~~~~~~~~~~~~~~~~~
+
+Database: create it from sql/schema9.sql (docker compose does this for the
+nineserver-db service).
+
+The game logs in and loads its web pages (EULAs, auth.php, ranking) over
+HTTPS. It picks TLS by port, not by URL scheme: port 80 is plain HTTP, any
+other port is HTTPS. In etc/conf/nineserver.yaml point WebBaseUrl at the
+WebInterface sslPort on the host players connect to:
+
+WebBaseUrl: "https://203.0.113.10:9193"
+
+Then create a certificate covering that host, and have every player trust it
+once (admin command prompt on the player's PC):
+
+python scripts/make_pes2009_cert.py 203.0.113.10
+certutil -addstore -f Root etc\keys\pes2009web-cert.pem
+
+With docker compose, also set the DB servers to the compose service:
+
+    readServers: [nineserver-db]
+    writeServers: [nineserver-db]
+
+docker compose up -d --build nineserver-db nineserver

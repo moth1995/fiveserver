@@ -46,6 +46,7 @@ COPY sql ./sql
 COPY tac ./tac
 COPY web ./web
 COPY web6 ./web6
+COPY web9 ./web9
 COPY docker ./docker
 COPY service.sh ./
 

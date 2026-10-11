@@ -39,6 +39,26 @@ services:
       timeout: 20s
       retries: 10
 
+  nineserver-db:
+    image: ${DB_IMAGE:-mysql:8}
+    container_name: nineserver-db
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: nineserver
+      MYSQL_USER: nineserver
+      MYSQL_PASSWORD: proevo
+      MYSQL_ROOT_PASSWORD: rootpass
+    volumes:
+      - ./sql/schema9.sql:/docker-entrypoint-initdb.d/01-schema9.sql:ro
+      - nineserver-db-data:/var/lib/mysql
+    networks:
+      - nineserver-net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 20s
+      retries: 10
+
   fiveserver:
     build:
       context: .
@@ -87,12 +107,44 @@ services:
     networks:
       - sixserver-net
 
+  # PES2009. In etc/conf/nineserver.yaml set DB readServers/writeServers to
+  # [nineserver-db] and WebBaseUrl to https://<public host>:9193, and create
+  # the TLS cert for that host: python scripts/make_pes2009_cert.py <host>
+  nineserver:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: nineserver
+    restart: unless-stopped
+    depends_on:
+      nineserver-db:
+        condition: service_healthy
+    environment:
+      SVC: nineserver
+    volumes:
+      - ./etc:/opt/fiveserver/etc
+      - ./log:/opt/fiveserver/log
+      - ./web9:/opt/fiveserver/web9
+    ports:
+      - "20010:20010"
+      - "20020:20020"
+      - "20030:20030"
+      - "20085:20085"
+      - "9190:9190"
+      - "9193:9193"
+      # - "9191:9191" # Uncomment if you want to enable the web admin interface for PES 2009
+    networks:
+      - nineserver-net
+
 volumes:
   fiveserver-db-data:
   sixserver-db-data:
+  nineserver-db-data:
 
 networks:
   fiveserver-net:
     driver: bridge
   sixserver-net:
+    driver: bridge
+  nineserver-net:
     driver: bridge
