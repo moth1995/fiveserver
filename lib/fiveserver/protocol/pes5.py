@@ -140,6 +140,9 @@ class NewsProtocol(PacketDispatcher):
 
 class LoginService(PacketDispatcher):
 
+    # appended to every 0x3004 auth result (PES2009 expects u32 + u8)
+    AUTH_RESULT_SUFFIX = b''
+
     def __init__(self):
         self._user = None
         self.gameName = None
@@ -196,12 +199,17 @@ class LoginService(PacketDispatcher):
     def getRosterHash(self, pkt_data):
         return pkt_data[48:64]
 
+    def checkSerial(self, pkt_data, usr):
+        # PES5/PES6 bind the serial into the user hash already
+        return True
+
     @defer.inlineCallbacks
     def authenticate_3003(self, pkt):
         cipher = Blowfish.new(binascii.a2b_hex(self.factory.cipherKey), Blowfish.MODE_ECB)
         if self.factory.serverConfig.Debug:
             log.debug('[BLOWFISH]: %s' % PacketFormatter.format(pkt, cipher))
-        clientRosterHash = self.getRosterHash(cipher.decrypt(pkt.data))
+        decrypted = cipher.decrypt(pkt.data)
+        clientRosterHash = self.getRosterHash(decrypted)
         if clientRosterHash != '':
             log.msg(
                 'client roster hash: {%s}' % binascii.b2a_hex(clientRosterHash))
@@ -215,7 +223,11 @@ class LoginService(PacketDispatcher):
             if self.factory.isUserOnline(self._user):
                 # already logged in
                 log.msg('User already logged in!')
-                self.sendData(0x3004,struct.pack('!I',0xffffff11))
+                self.sendAuthResult(0xffffff11)
+            elif not self.checkSerial(decrypted, self._user):
+                log.msg('Serial check FAILED for user {%s, username=%s}' % (
+                    self._user.hash, self._user.username))
+                self.sendAuthResult(0xffffff10)
             elif self.checkRosterHash(clientRosterHash):
                 # user is now LOGGED IN
                 self.factory.userOnline(self._user)
@@ -223,7 +235,7 @@ class LoginService(PacketDispatcher):
                     self.factory.setUserInfo(
                         self._user,
                         user.UserInfo(self.gameName, clientRosterHash))
-                self.sendZeros(0x3004,4)
+                self.sendAuthResult(0)
             else:
                 # server is configured to not allow players
                 # without proper roster-hashes
@@ -231,12 +243,15 @@ class LoginService(PacketDispatcher):
                     'Roster-hash check FAILED for user {%s, username=%s} '
                     'Disconnecting.' % (
                         self._user.hash, self._user.username))
-                self.sendData(0x3004,struct.pack('!I',0xffffff12))
+                self.sendAuthResult(0xffffff12)
         except errors.UnknownUserError as info:
             # authentication error
             log.msg('UnknownUserError: %s' % info)
-            self.sendData(0x3004,struct.pack('!I',0xffffff10))
+            self.sendAuthResult(0xffffff10)
         defer.returnValue(None)
+
+    def sendAuthResult(self, code):
+        self.sendData(0x3004, struct.pack('!I', code) + self.AUTH_RESULT_SUFFIX)
 
     def makePristineProfile(self, profile):
         p = user.Profile(profile.index)
