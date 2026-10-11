@@ -115,7 +115,7 @@ class Lobby:
         return None
         
     def isRoom(self, name):
-        return self.rooms.has_key(name)
+        return name in self.rooms
 
     def enter(self, usr, lobbyConnection):
         usr.lobbyConnection = lobbyConnection
@@ -147,6 +147,11 @@ class Room:
         
         self.participatingPlayers = list()
         self.phase = 1 # Phase of room and used in 0x4344
+        # PES2009 0x4310 settings (defaults = goalserver values)
+        self.maxPlayers = 4
+        self.isFriendly = 1
+        self.teamCategory = 3
+        self.limitInvitations = 0
 
     def __cmp__(self, another):
         if another is None:
@@ -385,6 +390,7 @@ class Match6:
     def __init__(self, teamSelection):
         self.state = MatchState.NOT_STARTED
         self.clock = 0
+        self.friendly = False  # PES2009: room setting, excluded from ranking
         self.score_home_1st = 0
         self.score_home_2nd = 0
         self.score_home_et1 = 0

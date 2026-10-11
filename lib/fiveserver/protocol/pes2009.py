@@ -5,123 +5,154 @@ Protocol implementations for PES6
 from twisted.internet import defer
 
 from datetime import datetime
+import functools
+import re
 import struct
 
 from fiveserver.model import user, lobby, util
-from fiveserver import log
+from fiveserver import data9, log
 from fiveserver.protocol import pes6
 
-class Packet2202Entry:
-    """
-    PES2009 packet 0x2202: web-server list entry
-    """
 
-    def __init__(
-        self, ordinal: int, url: str, unk00: int, unk01: int, md5_hash: str
-    ) -> None:
-        self.ordinal = ordinal
-        self.url = url
-        self.unk00 = unk00
-        self.unk01 = unk01
-        self.md5_hash = md5_hash
-
-    def to_bytes(self) -> bytes:
-        return (
-            struct.pack("!b", self.ordinal)
-            + util.padWithZeros(self.url, 128)
-            + struct.pack("!H", self.unk00)
-            + struct.pack("!I", self.unk01)
-            + util.padWithZeros(self.md5_hash, 32)
-        )
-
-
-# Static web-server list payloads, verbatim from binary captures.
-_2202_ENTRIES = [
-    Packet2202Entry(
-        0,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesgetrank.html",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        1,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesRankingWeek.html",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        2,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/pc_spec/pc_spec.php",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        3,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download.php",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        4,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download_desc.php",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        5,
-        "https://id.konami.net/quick/selectCountry.jsp",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        6,
-        "https://id.konami.net/login.do",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        7,
-        "https://pes2009web.winning-eleven.net/pes09pc/web/konamiid/auth.php",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        8,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/fdvideo/fdvideo.php",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        9,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_pes_en.txt",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        10,
-        "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_konami_en.txt",
-        0,
-        0,
-        "",
-    ),
-    Packet2202Entry(
-        11,
-        "",
-        0,
-        0,
-        "",
-    ),
+# 0x2202 web-server list: (ordinal, url, version). Client entry (reader
+# pes2009.exe FUN_00d324b0, 12 x 0xa8 at session+0x3360): u8 ordinal,
+# url[128], u16 version, u32, hash[32]. Only url (getter FUN_00d61c80) and
+# version are ever read; version of 9/10 (EULAs) is compared with save data
+# (FUN_00d2df20) and a change shows the agreement again. u32/hash: unused.
+# The scheme is ignored: WinINet requests (FUN_008b6d60 & co.) use TLS for
+# any port but 80, so http://host:9191 is also fetched over HTTPS.
+_WEB_PAGES = [
+    (0, "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesgetrank.html", 0),
+    (1, "http://pes2009web.winning-eleven.net/pes09pc/web/ranking/pesRankingWeek.html", 0),
+    (2, "http://pes2009web.winning-eleven.net/pes09pc/web/pc_spec/pc_spec.php", 0),
+    (3, "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download.php", 0),
+    (4, "http://pes2009web.winning-eleven.net/pes09pc/web/dlcontents/download_desc.php", 0),
+    (5, "https://id.konami.net/quick/selectCountry.jsp", 0),
+    (6, "https://id.konami.net/login.do", 0),
+    (7, "https://pes2009web.winning-eleven.net/pes09pc/web/konamiid/auth.php", 0),
+    (8, "http://pes2009web.winning-eleven.net/pes09pc/web/fdvideo/fdvideo.php", 0),
+    (9, "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_pes_en.txt", 0),
+    (10, "http://pes2009web.winning-eleven.net/pes09pc/web/agreement/pc/eula_konami_en.txt", 0),
+    (11, "", 0),
 ]
+
+
+@functools.lru_cache(maxsize=None)
+def webPagePackets(base=None):
+    """
+    0x2202 payloads (6 entries each). base (nineserver.yaml WebBaseUrl)
+    replaces scheme+host of every pes2009web URL. Built once per base.
+    """
+    entries = [
+        struct.pack("!B", ordinal)
+        + util.padWithZeros(
+            re.sub(r"^https?://pes2009web\.winning-eleven\.net", base, url)
+            if base
+            else url,
+            128,
+        )
+        + struct.pack("!HI", version, 0)
+        + bytes(32)  # hash: unused by the client
+        for ordinal, url, version in _WEB_PAGES
+    ]
+    return tuple(b"".join(entries[i : i + 6]) for i in range(0, len(entries), 6))
+
+
+# Teams allowed online (0x4101, relayed per player in 0x4330/0x4347):
+# u16[400], 0xffff padded. pes2009.exe FUN_00ce2530/FUN_00c90ea0 drop every
+# team of the national (category 8), club (0x15) and classic (9) lists that
+# isn't in it (FUN_008af000) from team select. Same set as goalserver/Konami:
+# all national teams and clubs except the classics (902-908) and 1533-1552.
+ONLINE_TEAMS = (
+    tuple(range(1, 25)) + (26, 27, 28, 29, 30, 31) + tuple(range(33, 41))
+    + (42,) + tuple(range(44, 58)) + tuple(range(100, 104)) + tuple(range(105, 123))
+    + (124, 125, 130, 131, 132, 133, 134, 135, 138, 139, 172, 173, 174)
+    + tuple(range(176, 182)) + (186, 188, 190, 191, 192, 193, 194, 197, 198, 199, 200,
+    202, 205, 206, 212, 213, 216, 217, 218, 219, 221, 234, 236)
+    + tuple(range(238, 249)) + (250, 251, 252, 253, 255, 258, 259, 260, 261, 263, 264,
+    265, 266, 267, 269, 270, 273, 320, 321, 323, 327, 333, 339, 349, 351, 357, 362,
+    363, 368, 371, 395, 396, 399, 400, 405, 409, 413, 414, 415, 418, 1031, 1032, 1051,
+    1058, 1099, 1164, 1197, 1203, 1205, 1207, 1215, 1216, 1218, 1223, 1227, 1232,
+    1252, 1528, 1550, 1582, 1583, 1589, 1706, 1733, 1746, 1832)
+)
+ONLINE_TEAMS_BLOCK = struct.pack("!400H", *ONLINE_TEAMS, *[0xFFFF] * (400 - len(ONLINE_TEAMS)))
+
+# 0x4101 (parser FUN_00d35240, copied out by FUN_00d44ff0): result u32,
+# profile id u32, ONLINE_TEAMS_BLOCK, then this tail. Values as goalserver.
+LOGIN_4101 = struct.Struct("!Ii800s5B48s5B10IBIIIBIIB")
+LOGIN_4101_TAIL = (
+    0, 0, 0, 0,  # u8: unknown (808 or 864 != 0 sets a menu flag)
+    8,  # u8: unknown, read by room code (session+0x3b4c)
+    b"",  # [48]: unknown string (session+0x5ed8d)
+    0, 0, 0, 0, 0,  # u8: unknown (861 == 0 sets two UI flags)
+    # connection bars (FUN_00d710a0): ping ms for 3/2/1 bars and bandwidth
+    # per peer for 3/2/1 bars, interleaved as on the wire
+    60, 1000000, 100, 128000, 150, 1,
+    4, 6, 8,  # u32: unknown, never read
+    2000,  # u32: in-match net setting (default 2000)
+    1,  # u8: unknown (session+0x3b75)
+    300,  # u32: in-match net setting (default 300 offline)
+    783, 3661,  # u32: unknown, copied into a report struct (FUN_008bda90)
+    0,  # u8: pending room invitations at login (same counter as 0x4c21)
+    100000, 100001,  # u32: unknown (default 100000)
+    0,  # u8: unknown (session+0x3b76)
+)
+
+# Profile record, PES6 0x4103 layout + PES2009 extensions (parser
+# FUN_00d334b0; offsets are packet offsets, after the result u32):
+#   4 id, 8 name[48], 56 group id, 60 group name[48], 108 group status,
+#   109 division, 110 points, 114 rating/games/wins/losses/draws/streak/
+#   best streak/disconnects (u16), 130 goals scored/allowed (u32),
+#   138 comment[256], 394 rank, 398 medals: competition gold/silver, unk,
+#   winners cup gold/silver, unk (u16), 410 u8 unk, 411 u8 language,
+#   412 last 5 teams (u16), 422 settings[28] (0x4120, PROFILE_SETTINGS),
+#   450 2 u32, 458 12 u8, 470 7 u16, 484 2 u32, 492 5 u16 (0xffff),
+#   502 u64: unknown; 510 game version[16].
+PROFILE_4103 = struct.Struct("!i48si48sBBi8Hii256si6HBB5H28sII12s7HII5HQ16s")
+
+# 0x3042 (select profile; parser FUN_00d3d2b0) is a shorter record. Goalserver
+# sends the 0x4103 layout minus the id (398 bytes), so from 124 on its bytes
+# are misread by the client. Wire: result, name[48], group id, group name[48],
+# group status, division, points, rating/games/wins/losses/draws/streak/best
+# streak (u16; no disconnects), 124 goals scored/allowed (u32, by analogy to
+# 0x4103), 132 comment[256], 388 rank, 392 u32 unk, 396 u64 unk (404 bytes).
+PROFILE_3042 = struct.Struct("!I48si48sBBi7Hii256siiQ")
+
+
+# 0x4120 (client -> server) = 28-byte settings block + comment (NUL-terminated).
+# The block maps 1:1 onto 0x4103[422:450] (reader FUN_00d334b0). Fields in
+# data9.SETTINGS_COLUMNS order: u32 unk_0, u16 birth_year (guess),
+# u8 birth_month, u8 birth_day, u8 unk_8, u16 country, u16 unk_11,
+# u16 fav_team, u32 fav_player, u8 unk_19, u32 unk_20, u32 unk_24.
+PROFILE_SETTINGS = struct.Struct("!IHBBBHHHIBII")
+
+PRESET_PHRASE_REJECTED = 0xFFFFFFFF  # 0x4e01 result for a banned phrase
+INVITE_REJECTED = 0xFFFFFFFF  # 0x4c22 result for a room invitation
+
+ROOM_SLOTS = 8  # PES2009 rooms carry 8 player slots (PES6: 4)
+GAME_VERSION = b"1.00.02"  # sent by goalserver in room/profile info
+
+
+def normalizeSerial(serial) -> str:
+    """'apvm-69n6-...' / b'APVM69N6...\\0' -> 'APVM69N6...'"""
+    serial = util.toUnicode(
+        util.stripZeros(serial) if isinstance(serial, bytes) else serial or ""
+    )
+    return re.sub(r"[\s-]", "", serial).upper()
+
+
+def recordStats(profile, stats):
+    """u16 run of 0x4103 (0x3042 takes the first 7)"""
+    return (
+        profile.rating,  # "Categoria" on the records screen
+        stats.wins + stats.losses + stats.draws,
+        stats.wins,
+        stats.losses,
+        stats.draws,
+        stats.streak_current,
+        stats.streak_best,
+        profile.disconnects,
+    )
 
 
 def getHomePlayerNames(match: lobby.Match6) -> str:
@@ -165,6 +196,7 @@ class NewsProtocol(pes6.NewsProtocol):
     def register(self):
         pes6.NewsProtocol.register(self)
         self.addHandler(0x2200, self.getWebServerList_2200)
+        self.addHandler(0x2300, self.do_2300)
 
     def getServerList_2005(self, pkt):
         myport = self.transport.getHost().port
@@ -205,11 +237,14 @@ class NewsProtocol(pes6.NewsProtocol):
         self.sendZeros(0x2004, 4)
 
     def getWebServerList_2200(self, pkt):
+        base = getattr(self.factory.serverConfig, "WebBaseUrl", None)
         self.sendData(0x2201, struct.pack("!II", 0, 6))
-        for i in range(0, len(_2202_ENTRIES), 6):
-            batch = _2202_ENTRIES[i : i + 6]
-            self.sendData(0x2202, b"".join(entry.to_bytes() for entry in batch))
+        for data in webPagePackets(base):
+            self.sendData(0x2202, data)
         self.sendZeros(0x2203, 4)
+
+    def do_2300(self, pkt):
+        self.sendData(0x2301, b"\0\0\0\0\x01\x31")
 
 
 class RosterHandler:
@@ -219,7 +254,28 @@ class RosterHandler:
     """
 
     def getRosterHash(self, pkt_data):
-        return pkt_data[58:74]
+        # 0x3003 (pes2009.exe FUN_00d3de60): [0x32:0x42] = md5(nonce +
+        # md5(player data)), [0x42:0x52] = md5(nonce + md5(team data)).
+        # nonce = the 16 bytes we send in 0x3002; keep them constant (zeros)
+        # or hashes stop being comparable between users.
+        return pkt_data[0x32:0x52]
+
+    def disconnect_0003(self, pkt):
+        # PES2009 waits for the server to close after 0x0003 before moving to
+        # the next service (goalserver closes the socket on 0x0003 too)
+        super().disconnect_0003(pkt)
+        self.transport.loseConnection()
+
+    # PES5/PES6 in-game options backup (0x308a/0x3088/0x3089) is not stored
+    # for PES2009: schema9's `settings` table holds the 0x4120 block instead.
+    def askForSettings_308a(self, pkt):
+        self.sendData(0x3087, struct.pack("!I", 0xFFFFFEDD))  # "no settings"
+
+    def do_3088(self, pkt):
+        pass
+
+    def do_3089(self, pkt):
+        self.sendZeros(0x308B, 4)
 
 
 class LoginService(RosterHandler, pes6.LoginService):
@@ -227,24 +283,27 @@ class LoginService(RosterHandler, pes6.LoginService):
     Login-service for PES2009
     """
 
+    AUTH_RESULT_SUFFIX = b"\0"
+
+    def checkSerial(self, pkt_data, usr):
+        """
+        0x3003 carries the game serial at [0x5a:0x6e] (20 chars). The user
+        hash doesn't include it, so compare against the registered serial.
+        """
+        return normalizeSerial(pkt_data[0x5A:0x6E]) == normalizeSerial(usr.serial)
+
     @defer.inlineCallbacks
     def getProfiles_3010(self, pkt):
+        # the client parses a single profile per account (0x3012 = 70 bytes)
+        profiles = self._user.profiles[:1]
         if self.factory.serverConfig.ShowStats:
             results = yield defer.DeferredList(
-                [
-                    self.factory.matchData.getGames(profile.id)
-                    for profile in self._user.profiles
-                ]
+                [self.factory.matchData.getGames(profile.id) for profile in profiles]
             )
-            profiles = self._user.profiles
         else:
             # hide all stats
-            results = yield defer.succeed(
-                [(True, 0) for profile in self._user.profiles]
-            )
-            profiles = [
-                self.makePristineProfile(profile) for profile in self._user.profiles
-            ]
+            results = yield defer.succeed([(True, 0) for profile in profiles])
+            profiles = [self.makePristineProfile(profile) for profile in profiles]
         data = b"\0" * 4 + b"".join(
             [
                 b"%(index)s%(id)s%(name)s%(playTime)s"
@@ -269,6 +328,50 @@ class LoginService(RosterHandler, pes6.LoginService):
         self.sendData(0x3012, data)
         defer.returnValue(None)
 
+    def createProfile_3020(self, pkt):
+        # PES2009 has one profile per account: slot 0 only, and only while
+        # the account has none (id 0 = empty; deleted profiles reset to 0)
+        if pkt.data[0] != 0 or self._user.profiles[0].id > 0:
+            log.msg(
+                "Profile create refused for {%s}: slot %d, existing id %d"
+                % (self._user.username, pkt.data[0], self._user.profiles[0].id)
+            )
+            self.sendData(0x3022, struct.pack("!I", 0xFFFFFFFF))
+            return
+        return super().createProfile_3020(pkt)
+
+    @defer.inlineCallbacks
+    def selectProfile_3040(self, pkt):
+        profileId = struct.unpack("!i", pkt.data[0:4])[0]
+        index, self._user.profile = self._user.getProfileById(profileId)
+        if self._user.profile is None:
+            log.msg("ERROR: user profile not found for id: %d" % profileId)
+            self.sendZeros(0x3041, 4)
+            return
+        profile = self._user.profile
+        if not self.factory.serverConfig.ShowStats:
+            profile = self.makePristineProfile(profile)
+        stats = yield self.getStats(profile.id)
+        self.sendData(
+            0x3042,
+            PROFILE_3042.pack(
+                0,
+                util.padWithZeros(profile.name, 48),
+                0,  # group id
+                b"",  # group name
+                0,  # group member status
+                self.factory.ratingMath.getDivision(profile.points),
+                profile.points,
+                *recordStats(profile, stats)[:7],
+                stats.goals_scored,
+                stats.goals_allowed,
+                util.padWithZeros(profile.comment or "", 256),
+                profile.rank,
+                0,
+                0,
+            ),
+        )
+
     def getMatchResults_3070(self, pkt):
         self.sendZeros(0x3071, 4)
         self.sendZeros(0x3073, 4)
@@ -288,16 +391,6 @@ class LoginServicePES2009(LoginService):
         self.gameName = "pes2009"
 
 
-class LoginServiceWE2007(LoginService):
-    """
-    Specific implementation of login service for WE2007
-    """
-
-    def __init__(self):
-        LoginService.__init__(self)
-        self.gameName = "we2007"
-
-
 class NetworkMenuService(RosterHandler, pes6.NetworkMenuService):
     """
     PES2009 implementation.
@@ -305,8 +398,175 @@ class NetworkMenuService(RosterHandler, pes6.NetworkMenuService):
     he/she is in the "NETWORK MENU" mode.
     """
 
+    def formatPlayerInfo(self, usr, roomId, stats=None):
+        """
+        183-byte player record used by 0x4212/0x4220/0x4222
+        (client parser pes2009.exe FUN_00d34ea0)
+        """
+        if stats is None:
+            stats = user.Stats(usr.profile.id, 0, 0, 0, 0, 0, 0, 0)
+        return b"".join(
+            [
+                struct.pack("!i", usr.profile.id),
+                util.padWithZeros(usr.profile.name, 48),
+                struct.pack("!i", 0),  # group id
+                b"\0" * 48,  # group name
+                b"\0",  # group member status
+                struct.pack(
+                    "!B", self.factory.ratingMath.getDivision(usr.profile.points)
+                ),
+                struct.pack("!i", roomId),
+                struct.pack("!i", usr.profile.points),
+                struct.pack("!H", usr.profile.rating),
+                struct.pack("!H", stats.wins + stats.losses + stats.draws),
+                struct.pack("!H", stats.wins),
+                struct.pack("!H", stats.losses),
+                struct.pack("!H", stats.draws),
+                b"\0" * 47,  # u8*3, u64, u32, u32, u16, [6], [20]: unknown
+                b"\x3c" + b"\0" * 11,  # 12 u8: unknown, goalserver sends 0x3c first
+            ]
+        )
 
-class MainService(RosterHandler, pes6.MainService):
+    def formatProfileInfo(self, profile, stats, settings=None):
+        """
+        0x4103 payload minus the leading result u32 (PROFILE_4103, 522 bytes).
+        settings = stored 0x4120 values (data9.SETTINGS_COLUMNS).
+        """
+        if not self.factory.serverConfig.ShowStats:
+            profile = self.makePristineProfile(profile)
+        teams = list(stats.teams)[:5]
+        settings = settings or data9.DEFAULT_SETTINGS
+        return PROFILE_4103.pack(
+            profile.id,
+            util.padWithZeros(profile.name, 48),
+            0,  # group id
+            b"",  # group name
+            0,  # group member status
+            self.factory.ratingMath.getDivision(profile.points),
+            profile.points,
+            *recordStats(profile, stats),
+            stats.goals_scored,
+            stats.goals_allowed,
+            util.padWithZeros(profile.comment or "", 256),
+            profile.rank,
+            0, 0, 0, 0, 0, 0,  # medals (competition, winners cup) + unknown
+            0,  # unknown
+            0,  # language
+            *teams, *[0xFFFF] * (5 - len(teams)),  # teams of the last 5 matches
+            PROFILE_SETTINGS.pack(*[settings[c] for c in data9.SETTINGS_COLUMNS]),
+            0, 0,
+            b"",
+            0, 0, 0, 0, 0, 0, 0,
+            0, 0,
+            *[0xFFFF] * 5,
+            0,
+            GAME_VERSION,
+        )
+
+    @defer.inlineCallbacks
+    def getProfile_4102(self, pkt):
+        profileId = struct.unpack("!i", pkt.data[0:4])[0]
+        profile = yield self.factory.getPlayerProfile(profileId)
+        if not profile:
+            self.sendZeros(0x4103, 0)
+            return
+        stats = yield self.getStats(profile.id)
+        settings = yield self.factory.profileData.getSettings(profile.id)
+        self.sendData(
+            0x4103, b"\0\0\0\0" + self.formatProfileInfo(profile, stats, settings)
+        )
+
+    @defer.inlineCallbacks
+    def setProfileSettings_4120(self, pkt):
+        """
+        0x4120: settings[28] (birthday, country, fav team/player, ...)
+        + comment (NUL-terminated, the game allows 40 chars). Reply 0x4121.
+        """
+        size = PROFILE_SETTINGS.size
+        settings = dict(
+            zip(
+                data9.SETTINGS_COLUMNS,
+                PROFILE_SETTINGS.unpack(bytes(pkt.data[:size]).ljust(size, b"\0")),
+            )
+        )
+        log.msg("Profile settings for {%s}: %s" % (self._user.profile.name, settings))
+        profile = self._user.profile
+        profile.comment = util.toUnicode(util.stripZeros(pkt.data[size:]))
+        yield self.factory.profileData.storeSettings(profile.id, settings)
+        yield self.factory.storeProfile(profile)
+        self.sendZeros(0x4121, 4)
+
+    def containsBannedWord(self, text):
+        """Chat.bannedWords from the yaml, case-insensitive substring match"""
+        text = util.toUnicode(text).lower()
+        return any(
+            word.lower() in text
+            for word in self.factory.serverConfig.Chat["bannedWords"]
+        )
+
+    def setPresetPhrase_4e00(self, pkt):
+        """
+        0x4e00: custom preset phrase (NUL-terminated). 0x4e01 (parser
+        FUN_00d3f700) is a u32 result: 0 = accepted, anything else = rejected.
+        """
+        phrase = util.stripZeros(pkt.data)
+        if self.containsBannedWord(phrase):
+            log.msg(
+                "Preset phrase from {%s} rejected (banned word): %s"
+                % (self._user.profile.name, util.toUnicode(phrase))
+            )
+            # ponytail: which non-zero code maps to which in-game message is
+            # unknown; 0xffffffff = generic failure. Tune after testing.
+            self.sendData(0x4E01, struct.pack("!I", PRESET_PHRASE_REJECTED))
+        else:
+            self.sendZeros(0x4E01, 4)
+
+    def getInviteHistory_4c10(self, pkt):
+        """
+        0x4c10: profile id u32 -> list of recently met players to invite.
+        Reply 0x4c11 result u32, 0x4c12 entries (FUN_00d3f8b0, max 20, each
+        FUN_00d34200: profile id u32 + name[0x30] + u32 + u8), 0x4c13 end.
+        TODO: keep a history of opponents/room mates and send it as 0x4c12.
+        For now: always an empty list.
+        """
+        self.sendZeros(0x4C11, 4)
+        self.sendZeros(0x4C13, 0)
+
+    def inviteToRoom_4c20(self, pkt):
+        """
+        0x4c20: invite player into my room: name[0x30] + u8.
+        The reply is 0x4c22 (u32 result, 0 = sent; menu waits on it in
+        FUN_00d50980), NOT 0x4c21: 0x4c21 is an unsolicited u8 "pending
+        invitations" counter (FUN_00d508e0, >0 = has invites).
+        TODO: implement invitations (find the invitee by name, bump their
+        0x4c21 counter, relay their answer; 0x4c23 = u32 result, unknown use).
+        Rejected for now.
+        """
+        name = util.toUnicode(util.stripZeros(pkt.data[:0x30]))
+        log.msg("Room invitation to {%s} rejected: not implemented" % name)
+        # ponytail: non-zero = failure; which code shows which message unknown
+        self.sendZeros(0x4C22, 4)
+        self.sendZeros(0x4C23, 4)
+
+    def register(self):
+        pes6.NetworkMenuService.register(self)
+        self.addHandler(0x4120, self.setProfileSettings_4120)
+        self.addHandler(0x4C10, self.getInviteHistory_4c10)
+        self.addHandler(0x4C20, self.inviteToRoom_4c20)
+        self.addHandler(0x4E00, self.setPresetPhrase_4e00)
+
+    def do_4100(self, pkt):
+        profileIndex = struct.unpack("!B", pkt.data[0:1])[0]
+        self._user.profile = self._user.profiles[profileIndex]
+        self.sendData(
+            0x4101,
+            LOGIN_4101.pack(
+                0, self._user.profile.id, ONLINE_TEAMS_BLOCK, *LOGIN_4101_TAIL
+            ),
+        )
+
+
+class MainService(NetworkMenuService, pes6.MainService):
     """
     PES2009 implementation
     The main game server, which keeps track of matches, goals
@@ -326,89 +586,6 @@ class MainService(RosterHandler, pes6.MainService):
                 for player in room.players:
                     player.sendData(0x4365, data)
             self.exitingLobby(self._user)
-
-    def formatPlayerInfo(self, usr, roomId, stats=None):
-        if stats is None:
-            stats = user.Stats(usr.profile.id, 0, 0, 0, 0, 0, 0, 0)
-        return (
-            b"%(id)s%(name)s%(groupid)s%(groupname)s"
-            b"%(groupmemberstatus)s%(division)s%(roomid)s"
-            b"%(points)s%(rating)s%(matches)s%(wins)s"
-            b"%(losses)s%(draws)s%(pad1)s"
-            % {
-                b"id": struct.pack("!i", usr.profile.id),
-                b"name": util.padWithZeros(usr.profile.name, 48),
-                b"groupid": struct.pack("!i", 0),
-                b"groupname": b"\0" * 48,
-                b"groupmemberstatus": struct.pack("!B", 0),
-                b"division": struct.pack(
-                    "!B", self.factory.ratingMath.getDivision(usr.profile.points)
-                ),
-                b"roomid": struct.pack("!i", roomId),
-                b"points": struct.pack("!i", usr.profile.points),
-                b"rating": struct.pack("!H", 0),
-                b"matches": struct.pack("!H", stats.wins + stats.losses + stats.draws),
-                b"wins": struct.pack("!H", stats.wins),
-                b"losses": struct.pack("!H", stats.losses),
-                b"draws": struct.pack("!H", stats.draws),
-                b"pad1": b"\0" * 3,
-            }
-        )
-
-    def formatProfileInfo(self, profile, stats):
-        if not self.factory.serverConfig.ShowStats:
-            profile = self.makePristineProfile(profile)
-        return (
-            b"%(id)s%(name)s%(groupid)s%(groupname)s"
-            b"%(groupmemberstatus)s%(division)s"
-            b"%(points)s%(rating)s%(matches)s"
-            b"%(wins)s%(losses)s%(draws)s%(win-strk)s"
-            b"%(win-best)s%(disconnects)s"
-            b"%(goals-scored)s%(goals-allowed)s"
-            b"%(comment)s%(rank)s"
-            b"%(competition-gold-medals)s%(competition-silver-medals)s"
-            b"%(unknown1)s"
-            b"%(winnerscup-gold-medals)s%(winnerscup-silver-medals)s"
-            b"%(unknown2)s%(unknown3)s"
-            b"%(language)s%(recent-used-teams)s"
-            % {
-                b"id": struct.pack("!i", profile.id),
-                b"name": util.padWithZeros(profile.name, 48),
-                b"groupid": struct.pack("!i", 0),
-                b"groupname": util.padWithZeros("Playmakers", 48),
-                b"groupmemberstatus": struct.pack("!B", 1),
-                b"division": struct.pack(
-                    "!B", self.factory.ratingMath.getDivision(profile.points)
-                ),
-                b"points": struct.pack("!i", profile.points),
-                b"rating": struct.pack("!H", profile.rating),
-                b"matches": struct.pack("!H", stats.wins + stats.losses + stats.draws),
-                b"wins": struct.pack("!H", stats.wins),
-                b"losses": struct.pack("!H", stats.losses),
-                b"draws": struct.pack("!H", stats.draws),
-                b"win-strk": struct.pack("!H", stats.streak_current),
-                b"win-best": struct.pack("!H", stats.streak_best),
-                b"disconnects": struct.pack("!H", profile.disconnects),
-                b"goals-scored": struct.pack("!i", stats.goals_scored),
-                b"goals-allowed": struct.pack("!i", stats.goals_allowed),
-                b"comment": util.padWithZeros(
-                    (profile.comment or "Fiveserver rules!"), 256
-                ),
-                b"rank": struct.pack("!i", profile.rank),
-                b"competition-gold-medals": struct.pack("!H", 0),
-                b"competition-silver-medals": struct.pack("!H", 0),
-                b"unknown1": struct.pack("!H", 0),
-                b"winnerscup-gold-medals": struct.pack("!H", 0),
-                b"winnerscup-silver-medals": struct.pack("!H", 0),
-                b"unknown2": struct.pack("!H", 0),
-                b"unknown3": struct.pack("!B", 0),
-                b"language": struct.pack("!B", 0),
-                b"recent-used-teams": b"".join(
-                    [struct.pack("!H", team) for team in stats.teams]
-                )
-                + b"\xff\xff" * (5 - len(stats.teams)),
-            }
-        )
 
     def formatHomeOrAway(self, room, usr):
         if room.teamSelection:
@@ -469,6 +646,10 @@ class MainService(RosterHandler, pes6.MainService):
         )  # pen
 
     def formatRoomInfo(self, room):
+        """
+        324-byte room record used by 0x4302/0x4306
+        (client parser pes2009.exe FUN_00d36c00)
+        """
         n = len(room.players)
         if room.match:
             match_state = room.match.state
@@ -479,7 +660,7 @@ class MainService(RosterHandler, pes6.MainService):
             struct.pack("!i", room.id),
             struct.pack("!B", room.phase),
             struct.pack("!B", match_state),
-            util.padWithZeros(room.name, 64),
+            util.padWithZeros(room.name, 128),
             struct.pack("!B", match_clock),
             b"".join(
                 [
@@ -497,12 +678,26 @@ class MainService(RosterHandler, pes6.MainService):
                     for usr in room.players
                 ]
             ),
-            b"\0\0\0\0\0\0\xff\0\0\xff" * (4 - n),  # empty players
+            b"\0\0\0\0\0\0\xff\0\0\xff" * (ROOM_SLOTS - n),  # empty players
             self.formatTeamsAndGoals(room),
-            b"\0",  # padding
-            struct.pack("!B", int(room.usePassword)),  # room locked
-            b"\0\x02\0\0",
-        )  # competition flag, match chat setting, 2 unknowns
+            # settings from 0x4310. ponytail: order of the last 4 inferred by
+            # matching goalserver bytes (04 01 03 00) to a 0x4310 capture
+            struct.pack(
+                "!BBBBBBBBBB",
+                0,
+                int(room.usePassword),
+                0,
+                0,
+                0,
+                0,
+                room.maxPlayers,
+                room.isFriendly,
+                room.teamCategory,
+                room.limitInvitations,
+            ),
+            b"\0" * 68,  # 60-byte block (FUN_00d35600) + u32 + u32: unknown
+            util.padWithZeros(GAME_VERSION, 16) + b"\0",
+        )
 
     def formatRoomParticipationStatus(self, room):
         """
@@ -522,13 +717,40 @@ class MainService(RosterHandler, pes6.MainService):
                     for usr in room.players
                 ]
             ),
-            b"\0\0\0\0\0\xff" * (4 - n),
+            b"\0\0\0\0\0\xff" * (ROOM_SLOTS - n),
         )
         return data
 
+    def formatStunInfo(self, usr, room, prefix):
+        """
+        0x4330 (prefix=4 zero bytes) / 0x4347 (no prefix) record:
+        ONLINE_TEAMS_BLOCK + ip1 + port1 + ip2 + port2 + profile id + ...
+        """
+        data = b"%s%s%s%s%s%s%s" % (
+            prefix,
+            ONLINE_TEAMS_BLOCK,
+            util.padWithZeros(usr.state.ip1, 16),
+            struct.pack("!H", usr.state.udpPort1),
+            util.padWithZeros(usr.state.ip2, 16),
+            struct.pack("!H", usr.state.udpPort2),
+            struct.pack("!i", usr.profile.id),
+        )
+        participate = struct.pack("!B", room.getPlayerParticipate(usr))
+        if prefix:
+            return data + b"\x01\x01" + participate  # 0x4330, as goalserver
+        return data + b"\0\0" + participate + b"\0" * 8  # 0x4347
+
+    def sendStunInfo(self, room):
+        """0x4346/0x4347*/0x4348: connection info of everyone in the room"""
+        self.sendZeros(0x4346, 4)
+        for usr in room.players:
+            self.sendData(0x4347, self.formatStunInfo(usr, room, b""))
+        self.sendZeros(0x4348, 4)
+
     def becomeSpectator_4366(self, pkt):
         self._user.state.spectator = 1
-        self.sendZeros(0x4367, 4)
+        # 0x4367 (FUN_00d41840): result u32 + spectator u8
+        self.sendData(0x4367, b"\0\0\0\0\x01")
 
     def do_4351(self, pkt):
         """
@@ -550,83 +772,38 @@ class MainService(RosterHandler, pes6.MainService):
 
     def backToMatchMenu_4383(self, pkt):
         """
-        Contains old,added,new points & rating
-        For players and groups
+        0x4384 (pes2009.exe FUN_00d332b0): result u32, then 8 records of
+        id u32, added points u16, new points u32, u16, u16, 7 x u8.
+        No group section (PES6 had one).
         """
         room = self._user.state.room
-        n = len(room.participatingPlayers)
-        data = b"\0\0\0\0%s%s%s" % (
-            b"".join(
-                [
-                    b"%s%s%s%s%s%s%s%s%s"
-                    % (
-                        struct.pack("!i", usr.profile.id),
-                        struct.pack("!H", 0),  # added points
-                        struct.pack("!i", 0),  # new points
-                        struct.pack("!H", 0),  # ?
-                        struct.pack("!H", 0),  # ?
-                        struct.pack("!H", 0),  # ?
-                        struct.pack("!H", 0),  # ?
-                        struct.pack("!H", 0),  # new rating
-                        struct.pack("!H", 0),
-                    )  # old rating
-                    for usr in room.participatingPlayers
-                ]
-            ),
-            b"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0" * (4 - n),
-            b"".join(
-                [
-                    b"%s%s%s%s%s%s"
-                    % (
-                        struct.pack("!i", 0),  # group1 id
-                        struct.pack("!H", 0),  # group1 added points
-                        struct.pack("!i", 0),  # group1 new points
-                        struct.pack("!i", 0),  # group2 id
-                        struct.pack("!H", 0),  # group2 added points
-                        struct.pack("!i", 0),
-                    )
-                ]
-            ),
-        )  # group2 new points
+        players = room.participatingPlayers[:ROOM_SLOTS]
+        data = b"\0\0\0\0" + b"".join(
+            struct.pack("!iHiHH", usr.profile.id, 0, usr.profile.points, 0, 0)
+            + b"\0" * 7
+            for usr in players
+        )
+        data += b"\0" * 21 * (ROOM_SLOTS - len(players))
         self.sendData(0x4384, data)
 
     def quickGameSearch_6020(self, pkt):
         self.sendZeros(0x6021, 0)
 
     def getStunInfo_4345(self, pkt):
-        self.sendZeros(0x4346, 0)
         roomId = struct.unpack("!i", pkt.data[0:4])[0]
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         room = thisLobby.getRoomById(roomId)
-        if room is not None:
-            # send stun info of players in room to requester
-            for usr in room.players:
-                data = (
-                    b"%(pad1)s%(ip1)s%(port1)s"
-                    b"%(ip2)s%(port2)s%(id)s"
-                    b"%(someField)s%(participate)s"
-                ) % {
-                    b"pad1": b"\0" * 32,
-                    b"ip1": util.padWithZeros(usr.state.ip1, 16),
-                    b"port1": struct.pack("!H", usr.state.udpPort1),
-                    b"ip2": util.padWithZeros(usr.state.ip2, 16),
-                    b"port2": struct.pack("!H", usr.state.udpPort2),
-                    b"id": struct.pack("!i", usr.profile.id),
-                    b"someField": struct.pack("!H", 0),
-                    b"participate": struct.pack("!B", room.getPlayerParticipate(usr)),
-                }
-                self.sendData(0x4347, data)
-                self.do_4330(room)
-        self.sendZeros(0x4348, 0)
+        if room is None:
+            self.sendZeros(0x4346, 4)
+            self.sendZeros(0x4348, 4)
+            return
+        self.sendStunInfo(room)
 
     def chat_4400(self, pkt):
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         chatType = pkt.data[0:2]
         message = util.stripZeros(pkt.data[10:])
-        if any(
-            word in message.decode("utf-8")
-            for word in self.factory.serverConfig.Chat["bannedWords"]
-        ):
+        if self.containsBannedWord(message):
             message = b"[%s]" % self.factory.serverConfig.Chat["warningMessage"].encode(
                 "utf-8"
             )
@@ -762,27 +939,35 @@ class MainService(RosterHandler, pes6.MainService):
         yield defer.succeed(None)
 
     def createRoom_4310(self, pkt):
+        """
+        0x4310: name[0x40] unk[0x40] password[0x10] use_password u8
+        team_category u8 limit_invitations u8 max_players? u8 unk u8 is_friendly u8
+        """
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         roomName = util.stripZeros(pkt.data[0:64])
-        try:
-            existing = thisLobby.getRoom(roomName)
+        if thisLobby.isRoom(roomName):
             self.sendData(0x4311, b"\xff\xff\xff\x10")
-        except KeyError:
-            room = lobby.Room(thisLobby)
-            room.name = roomName
-            room.usePassword = struct.unpack("!B", pkt.data[64:65])[0] == 1
-            if room.usePassword:
-                room.password = util.stripZeros(pkt.data[65:80])
-            # put room creator into the room
-            room.enter(self._user)
-            # add room to the lobby
-            thisLobby.addRoom(room)
-            log.msg("Room created: %s" % repr(room))
-            # notify all users in the lobby about the new room
-            self.sendRoomUpdate(room)
-            # notify all users in the lobby that player is now in a room
-            self.sendPlayerUpdate(room.id)
-            self.sendZeros(0x4311, 4)
+            return
+        room = lobby.Room(thisLobby)
+        room.name = roomName
+        room.usePassword = pkt.data[0x90] == 1
+        if room.usePassword:
+            room.password = util.stripZeros(pkt.data[0x80:0x90])
+        room.teamCategory = pkt.data[0x91]
+        room.limitInvitations = pkt.data[0x92]
+        room.maxPlayers = pkt.data[0x93]
+        room.isFriendly = pkt.data[0x95]
+        # put room creator into the room
+        room.enter(self._user)
+        # add room to the lobby
+        thisLobby.addRoom(room)
+        log.msg("Room created: %s" % repr(room))
+        # notify all users in the lobby about the new room
+        self.sendRoomUpdate(room)
+        # notify all users in the lobby that player is now in a room
+        self.sendPlayerUpdate(room.id)
+        self.sendZeros(0x4311, 4)
+        self.sendStunInfo(room)
 
     def getRoomList_4300(self, pkt):
         self.sendZeros(0x4301, 4)
@@ -806,7 +991,11 @@ class MainService(RosterHandler, pes6.MainService):
         self.sendZeros(0x434A, 4)
 
     def setRoomName_434d(self, pkt):
-        newName = util.stripZeros(pkt.data[0:63])
+        """
+        0x434d (pes2009.exe FUN_00d48380):
+        name[0x80] use_password u8 password[0x10]
+        """
+        newName = util.stripZeros(pkt.data[0:0x80])
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         room = self._user.state.room
         data = b"\0\0\0\0"
@@ -817,9 +1006,9 @@ class MainService(RosterHandler, pes6.MainService):
                     data = b"\xff\xff\xff\xff"
                 else:
                     thisLobby.renameRoom(room, newName)
-            room.usePassword = struct.unpack("!B", pkt.data[64:65])[0] == 1
+            room.usePassword = pkt.data[0x80] == 1
             if room.usePassword:
-                room.password = util.stripZeros(pkt.data[65:80])
+                room.password = util.stripZeros(pkt.data[0x81:0x91])
             self.sendRoomUpdate(room)
         self.sendData(0x434E, data)
 
@@ -828,75 +1017,32 @@ class MainService(RosterHandler, pes6.MainService):
         Notify people INSIDE room of
         ip,ports and participation status
         """
+        data = self.formatStunInfo(self._user, room, b"\0\0\0\0")
         for otherUsr in room.players:
-            if otherUsr == self._user:
-                continue
-            data = (
-                b"%(pad1)s%(ip1)s%(port1)s"
-                b"%(ip2)s%(port2)s%(id)s"
-                b"%(someField)s%(participate)s"
-            ) % {
-                b"pad1": b"\0" * 36,
-                b"ip1": util.padWithZeros(self._user.state.ip1, 16),
-                b"port1": struct.pack("!H", self._user.state.udpPort1),
-                b"ip2": util.padWithZeros(self._user.state.ip2, 16),
-                b"port2": struct.pack("!H", self._user.state.udpPort2),
-                b"id": struct.pack("!i", self._user.profile.id),
-                b"someField": struct.pack("!H", 0),
-                b"participate": struct.pack(
-                    "!B", room.getPlayerParticipate(self._user)
-                ),
-            }
-            otherUsr.sendData(0x4330, data)
+            if otherUsr != self._user:
+                otherUsr.sendData(0x4330, data)
 
     def joinRoom_4320(self, pkt):
+        """0x4320: room_id u32, password[0x10], unk u8"""
         roomId = struct.unpack("!i", pkt.data[0:4])[0]
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         room = thisLobby.getRoomById(roomId)
         if room is None:
             log.msg("ERROR: Room (id=%d) does not exist." % roomId)
-            self.sendData(0x4321, b"\0\0\0\1")
-        else:
-            if room.usePassword:
-                enteredPassword = util.stripZeros(pkt.data[4:19])
-                if enteredPassword != room.password:
-                    log.msg("ERROR: Room (id=%d) password does not match." % roomId)
-                    self.sendData(0x4321, b"\xff\xff\xfd\xda")
-                else:
-                    room.enter(self._user)
-            else:
-                room.enter(self._user)
-
-            self.sendRoomUpdate(room)
-            self.sendPlayerUpdate(room.id)
-            data = b"\0\0\0\0"
-            if room.matchSettings:
-                data += room.matchSettings.match_time
-            self.sendData(0x4321, data)
-        # give players in room stun of joiner
-        # special 4330 packet
+            self.sendData(0x4321, b"\0\0\0\1\0")
+            return
+        if room.usePassword and util.stripZeros(pkt.data[4:20]) != room.password:
+            log.msg("ERROR: Room (id=%d) password does not match." % roomId)
+            self.sendData(0x4321, b"\xff\xff\xfd\xda\0")
+            return
+        room.enter(self._user)
+        self.sendRoomUpdate(room)
+        self.sendPlayerUpdate(room.id)
+        matchTime = room.matchSettings.match_time if room.matchSettings else 0
+        self.sendData(0x4321, b"\0\0\0\0" + struct.pack("!B", matchTime))
+        # give players in room stun of joiner, then joiner stun of everyone
         self.do_4330(room)
-        # give joiner stun of players in room
-        self.sendZeros(0x4346, 0)
-        for otherUsr in room.players:
-            if otherUsr == self._user:
-                continue
-            data = (
-                b"%(pad1)s%(ip1)s%(port1)s"
-                b"%(ip2)s%(port2)s%(id)s"
-                b"%(someField)s%(participate)s"
-            ) % {
-                b"pad1": b"\0" * 32,
-                b"ip1": util.padWithZeros(otherUsr.state.ip1, 16),
-                b"port1": struct.pack("!H", otherUsr.state.udpPort1),
-                b"ip2": util.padWithZeros(otherUsr.state.ip2, 16),
-                b"port2": struct.pack("!H", otherUsr.state.udpPort2),
-                b"id": struct.pack("!i", otherUsr.profile.id),
-                b"someField": struct.pack("!H", 0),
-                b"participate": struct.pack("!B", room.getPlayerParticipate(otherUsr)),
-            }
-            self.sendData(0x4347, data)
-        self.sendZeros(0x4348, 0)
+        self.sendStunInfo(room)
 
     def exitingLobby(self, usr):
         usrLobby = self.factory.getLobbies()[usr.state.lobbyId]
@@ -992,16 +1138,18 @@ class MainService(RosterHandler, pes6.MainService):
         thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
         room = self._user.state.room
         if room:
-            data = b"%s%s" % (
-                b"\x02",
-                b"".join(
-                    [
-                        b"%s" % (struct.pack("!i", usr.profile.id))
-                        for usr in room.participatingPlayers
-                    ]
-                ),
-            )
-            data = util.padWithZeros(data, 37)
+            # 0x4362 (FUN_00d41b30): u8, 8 profile ids (slot order = sides:
+            # even home, odd away), 8 u32 (unknown, 0), 8 u8 (goalserver 0x3c
+            # per player). Client reads 73 bytes; the trailing 8 (0x02 per
+            # player) are goalserver's and ignored.
+            players = room.participatingPlayers[:ROOM_SLOTS]
+            n = len(players)
+            data = b"\x02" + b"".join(
+                struct.pack("!i", usr.profile.id) for usr in players
+            ).ljust(4 * ROOM_SLOTS, b"\0")
+            data += b"\0" * (4 * ROOM_SLOTS)
+            data += (b"\x3c" * n).ljust(ROOM_SLOTS, b"\0")
+            data += (b"\x02" * n).ljust(ROOM_SLOTS, b"\0")
             for player in room.players:
                 player.sendData(0x4362, data)
 
@@ -1078,10 +1226,13 @@ class MainService(RosterHandler, pes6.MainService):
             data = b"%s%s" % (b"\0", pkt.data)
             usr.sendData(0x436B, data)
         # create new TeamSelection object
+        # 0x4369 (FUN_00d49050): 8 x (profile id u32 + 4 u8). The side is not
+        # in the packet: like 0x4362, even slots are home, odd slots away,
+        # slots 0/1 are the captains.
         room.teamSelection = lobby.TeamSelection()
-        for x in range(4):
+        for x in range(min(ROOM_SLOTS, len(pkt.data) // 8)):
             profile_id = struct.unpack("!i", pkt.data[x * 8 : x * 8 + 4])[0]
-            away = 1 == pkt.data[x * 8 + 4]
+            away = x % 2 == 1
             if profile_id != 0:
                 profile = yield self.factory.getPlayerProfile(profile_id)
                 if x in [0, 1]:
@@ -1163,11 +1314,13 @@ class MainService(RosterHandler, pes6.MainService):
     def recordMatchResult(self, room):
         match = room.match
         duration = datetime.now() - match.startDatetime
+        friendly = match.friendly
         log.msg(
-            "MATCH FINISHED: "
+            "MATCH FINISHED (%s): "
             "Team %d (%s) - Team %d (%s)  %d:%d. "
             "Match time: %s."
             % (
+                "friendly" if friendly else "ranking",
                 match.teamSelection.home_team_id,
                 getHomePlayerNames(match),
                 match.teamSelection.away_team_id,
@@ -1177,28 +1330,22 @@ class MainService(RosterHandler, pes6.MainService):
                 duration,
             )
         )
-        # check if match result should be stored
-        thisLobby = self.factory.getLobbies()[self._user.state.lobbyId]
-        if thisLobby.typeCode != 0x20:  # no-stats
-            # record the match in DB
-            yield self.factory.matchData.store(match)
-            participants = [
-                match.teamSelection.home_captain,
-                match.teamSelection.away_captain,
-            ]
-            participants.extend(match.teamSelection.home_more_players)
-            participants.extend(match.teamSelection.away_more_players)
-            for profile in participants:
-                # update player play time
-                profile.playTime += duration
-                # re-calculate points
+        # PES2009: every match is stored with its friendly flag; ranking
+        # stats/points only count non-friendly ones (data9.MatchData)
+        yield self.factory.matchData.store(match)
+        participants = [
+            match.teamSelection.home_captain,
+            match.teamSelection.away_captain,
+        ]
+        participants.extend(match.teamSelection.home_more_players)
+        participants.extend(match.teamSelection.away_more_players)
+        for profile in participants:
+            profile.playTime += duration
+            if not friendly:
+                # re-calculate points from ranked results
                 stats = yield self.getStats(profile.id)
-                rm = self.factory.ratingMath
-                profile.points = rm.getPoints(stats)
-                # store updated profile
-                yield self.factory.storeProfile(profile)
-        else:
-            yield defer.succeed(None)
+                profile.points = self.factory.ratingMath.getPoints(stats)
+            yield self.factory.storeProfile(profile)
 
     def matchStateUpdate_4377(self, pkt):
         state = struct.unpack("!B", pkt.data[0:1])[0]
@@ -1223,6 +1370,8 @@ class MainService(RosterHandler, pes6.MainService):
                 match.startDatetime = datetime.now()
                 match.home_team_id = match.teamSelection.home_team_id
                 match.away_team_id = match.teamSelection.away_team_id
+                # friendly vs ranking is a room setting (0x4310), not a lobby one
+                match.friendly = bool(room.isFriendly)
                 room.match = match
                 room.match.state = state
             # check if match is done
@@ -1275,8 +1424,17 @@ class MainService(RosterHandler, pes6.MainService):
         Overriden here to mask pes5 logic
         """
 
+    def do_4c00(self, pkt):
+        self.sendZeros(0x4C01, 4)
+        self.sendZeros(0x4C03, 4)
+
     def register(self):
         pes6.MainService.register(self)
+        # pes5/pes6 chain skips our NetworkMenuService.register
+        self.addHandler(0x4120, self.setProfileSettings_4120)
+        self.addHandler(0x4C10, self.getInviteHistory_4c10)
+        self.addHandler(0x4C20, self.inviteToRoom_4c20)
+        self.addHandler(0x4E00, self.setPresetPhrase_4e00)
         self.addHandler(0x6020, self.quickGameSearch_6020)
         self.addHandler(0x4110, self.setComment_4110)
         self.addHandler(0x4345, self.getStunInfo_4345)
@@ -1299,3 +1457,4 @@ class MainService(RosterHandler, pes6.MainService):
         self.addHandler(0x4351, self.do_4351)
         self.addHandler(0x4383, self.backToMatchMenu_4383)
         self.addHandler(0x4380, self.forcedCancelParticipation_4380)
+        self.addHandler(0x4C00, self.do_4c00)
