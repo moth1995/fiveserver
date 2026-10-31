@@ -1,0 +1,119 @@
+name: fiveserver
+
+services:
+  five-db:
+    image: mariadb:11
+    container_name: fiveserver-five-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: fiveserver
+      MARIADB_USER: fiveserver
+      MARIADB_PASSWORD: ${FIVESERVER_FIVE_DB_PASSWORD:?Set FIVESERVER_FIVE_DB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - five-db-data:/var/lib/mysql
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 20
+
+  five:
+    build: .
+    container_name: fiveserver-five
+    command: ["python", "-m", "fiveserver", "five"]
+    depends_on:
+      five-db:
+        condition: service_healthy
+    environment:
+      FIVESERVER_DB_HOST: five-db
+      FIVESERVER_DB_PASSWORD: ${FIVESERVER_FIVE_DB_PASSWORD:?Set FIVESERVER_FIVE_DB_PASSWORD}
+      FIVESERVER_PUBLIC_IP: ${FIVESERVER_PUBLIC_IP:?Set FIVESERVER_PUBLIC_IP}
+      FIVESERVER_ADMIN_PASSWORD: ${FIVESERVER_FIVE_ADMIN_PASSWORD:?Set FIVESERVER_FIVE_ADMIN_PASSWORD}
+      FIVESERVER_LOG_MAX_BYTES: ${FIVESERVER_LOG_MAX_BYTES:-1000000}
+      FIVESERVER_LOG_BACKUP_COUNT: ${FIVESERVER_LOG_BACKUP_COUNT:-}
+    volumes:
+      - ./etc/conf:/app/etc/conf:ro
+      - ./etc/data:/app/etc/data
+      - ./etc/keys:/app/etc/keys:ro
+      - ./log:/app/log
+    ports:
+      # Game, login, menu, and registration ports keep their original bindings.
+      - "16001:16001"
+      - "18001:18001"
+      - "19501:19501"
+      - "20100:20100"
+      - "20101:20101"
+      - "20102:20102"
+      - "20103:20103"
+      - "20104:20104"
+      - "8180:8180"
+      # The HTTPS admin panel is local-only by default.
+      - "${FIVESERVER_ADMIN_BIND:-127.0.0.1}:8181:8181"
+    healthcheck:
+      test: ["CMD", "python", "-m", "fiveserver.healthcheck", "--url", "http://127.0.0.1:8180/", "--database", "fiveserver"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  six-db:
+    image: mariadb:11
+    container_name: fiveserver-six-db
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: sixserver
+      MARIADB_USER: sixserver
+      MARIADB_PASSWORD: ${FIVESERVER_SIX_DB_PASSWORD:?Set FIVESERVER_SIX_DB_PASSWORD}
+      MARIADB_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - six-db-data:/var/lib/mysql
+      - ./sql/schema6.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 20
+
+  six:
+    build: .
+    container_name: fiveserver-six
+    command: ["python", "-m", "fiveserver", "six"]
+    depends_on:
+      six-db:
+        condition: service_healthy
+    environment:
+      FIVESERVER_DB_HOST: six-db
+      FIVESERVER_DB_PASSWORD: ${FIVESERVER_SIX_DB_PASSWORD:?Set FIVESERVER_SIX_DB_PASSWORD}
+      FIVESERVER_PUBLIC_IP: ${FIVESERVER_PUBLIC_IP:?Set FIVESERVER_PUBLIC_IP}
+      FIVESERVER_ADMIN_PASSWORD: ${FIVESERVER_SIX_ADMIN_PASSWORD:?Set FIVESERVER_SIX_ADMIN_PASSWORD}
+      FIVESERVER_LOG_MAX_BYTES: ${FIVESERVER_LOG_MAX_BYTES:-1000000}
+      FIVESERVER_LOG_BACKUP_COUNT: ${FIVESERVER_LOG_BACKUP_COUNT:-}
+    volumes:
+      - ./etc/conf:/app/etc/conf:ro
+      - ./etc/data:/app/etc/data
+      - ./etc/keys:/app/etc/keys:ro
+      - ./log:/app/log
+    ports:
+      # Game, login, menu, and registration ports keep their original bindings.
+      - "10881:10881"
+      - "20200:20200"
+      - "20201:20201"
+      - "20202:20202"
+      - "20203:20203"
+      - "8190:8190"
+      # The HTTPS admin panel is local-only by default.
+      - "${FIVESERVER_ADMIN_BIND:-127.0.0.1}:8191:8191"
+    healthcheck:
+      test: ["CMD", "python", "-m", "fiveserver.healthcheck", "--url", "http://127.0.0.1:8190/", "--database", "sixserver"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+volumes:
+  five-db-data:
+  six-db-data:
