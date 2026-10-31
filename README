@@ -42,13 +42,12 @@ If you are on modern Debian or Ubuntu Linux then this should install everything
 you need:
 
     sudo apt-get -y update
-    sudo apt-get install libmysqlclient-dev python3 python3-venv python3-dev gcc make
+    sudo apt-get install python3 python3-venv python3-dev gcc make
 
 Otherwise, you will need to use your OS tools to install:
 
-    * Python 3
-    * libmysqlclient.
-    * gcc or clang
+    * Python 3.11 or newer
+    * gcc or clang (for the optional asyncmy wheel build)
     * make
 
 
@@ -76,7 +75,7 @@ appropriate permissions. If you use default database name and login/password
 
     create database fiveserver;
     create user 'fiveserver'@'%' identified by 'we9le';
-    grant select, insert, update on sixserver.* to 'fiveserver'@'%';
+    grant select, insert, update on fiveserver.* to 'fiveserver'@'%';
     use fiveserver;
     source ./sql/schema.sql
 
@@ -93,17 +92,150 @@ appropriate permissions. If you use default database name and login/password
 
 
 
+FIRST-RUN HTTPS SETUP (REQUIRED)
+===============================
+
+Release archives do not contain TLS private keys or certificates. Before starting
+either service, provide a certificate and its matching unencrypted private key at
+the files expected by `KeysDirectory` in `etc/conf/admin*.yaml`:
+
+    etc/keys/serverkey.pem
+    etc/keys/servercert.pem
+
+Use your own PKI tooling or certificate authority to create and install them. For
+local testing, a self-signed localhost certificate is acceptable; browsers will
+show a trust warning. For public production, use a trusted certificate and include
+intermediate certificates in `servercert.pem`. Restrict the private key to the
+server account; on Unix use `chmod 600` on the key and `chmod 644` on the
+certificate. Never commit or distribute the private key.
+
+Create the same files under a custom `KeysDirectory` if your admin configuration
+uses one.
+
+Set database credentials in YAML or `FIVESERVER_DB_PASSWORD`, and set a strong
+`FIVESERVER_ADMIN_PASSWORD` before exposing the service. Start from the project
+directory so relative configuration, key and asset paths resolve correctly:
+
+    python -m fiveserver five
+    python -m fiveserver six
+
+If startup reports missing TLS files, verify both paths and the working directory;
+the server does not silently fall back to unencrypted admin HTTP or generate keys.
+To renew a certificate, replace the pair after securing a backup and restart the
+server.
+
+
 USAGE
 =====
 
 
-The service.sh script can be used to run both services (fiveserver and sixserver) or
-to launch them in the background. Just run the script without any arguments to see
-all available options:
+Run one service directly from the project root:
 
-    ./service.sh 
-    Usage ./service.sh {fiveserver|sixserver} {run|start|stop|status}
+    python -m fiveserver five
+    python -m fiveserver six
 
-For example, to start fiveserver service, you would do:
+Use a process manager such as systemd, a service wrapper, or Docker Compose for
+background operation. The legacy `service.sh` helper has been removed.
 
-    ./service.sh fiveserver start
+
+## Docker
+
+The root `Dockerfile` and `compose.yaml` run the asyncio implementation. The
+project name is `fiveserver`, and each service has a fixed container name:
+`fiveserver-five`, `fiveserver-six`, `fiveserver-five-db`, and
+`fiveserver-six-db`. The image is built in two stages: an Alpine builder compiles
+`asyncmy` and installs the package, then only the installed files are copied into
+a clean Alpine runtime stage. The build tools and pip cache are not shipped in
+the final image.
+
+Compose also starts one MariaDB 11 container per service. The first start loads
+`sql/schema.sql` into `fiveserver` and `sql/schema6.sql` into `sixserver`; the
+named volumes `five-db-data` and `six-db-data` preserve them afterwards. The
+server containers wait until their database reports healthy, and their own health
+checks now verify both the registration HTTP endpoint and a live database query.
+
+First complete the HTTPS setup above on the host. Compose mounts `etc/keys`
+read-only into each container; an empty directory is not sufficient. Copy the
+example environment file and replace every placeholder:
+
+    cp .env.example .env
+
+    # Edit .env:
+    FIVESERVER_PUBLIC_IP=203.0.113.10
+    FIVESERVER_FIVE_DB_PASSWORD=...
+    FIVESERVER_SIX_DB_PASSWORD=...
+    FIVESERVER_FIVE_ADMIN_PASSWORD=...
+    FIVESERVER_SIX_ADMIN_PASSWORD=...
+    FIVESERVER_ADMIN_BIND=127.0.0.1
+
+    docker compose up --build
+
+`.env` is ignored by Git. The admin HTTPS ports (`8181` for five and `8191` for
+six) bind to `127.0.0.1` by default. Set `FIVESERVER_ADMIN_BIND=0.0.0.0` only
+when remote admin access is intentional and protected.
+
+The DB passwords above are used both for the MariaDB user and for the matching
+server's `FIVESERVER_DB_PASSWORD`. The database names and users come from
+`etc/conf/fiveserver.yaml` (`fiveserver`/`fiveserver`) and
+`etc/conf/sixserver.yaml` (`sixserver`/`sixserver`); keep those matching if you
+customize them.
+
+The original `etc/conf`, `etc/data`, `etc/keys`, and `log` directories are
+mounted into the containers. `etc/data/banned6.yaml` is the sixserver ban list;
+`etc/data/banned.yaml` is the five-family list. Database data lives in Docker
+volumes, so `docker compose down` keeps it. Use `docker compose down -v` when you
+explicitly want to delete the databases and re-run the schema initialization.
+
+
+## Logging
+
+Log files use Twisted's original rotation defaults: rotate at **1,000,000
+bytes**, then create numbered backups (`file.log.1`, `file.log.2`, ...). By
+default the number of rotated files is unlimited, matching Twisted's
+`maxRotatedFiles=None`.
+
+Rotation is controlled by environment variables, not YAML:
+
+```bash
+FIVESERVER_LOG_MAX_BYTES=1000000
+FIVESERVER_LOG_BACKUP_COUNT=
+```
+
+- `FIVESERVER_LOG_MAX_BYTES=0` disables rotation.
+- `FIVESERVER_LOG_BACKUP_COUNT` unset or empty keeps unlimited backups.
+- `FIVESERVER_LOG_BACKUP_COUNT=0` keeps only the newest rotated file.
+- `FIVESERVER_LOG_BACKUP_COUNT=N` keeps `.1` through `.N`.
+
+Docker Compose reads these from `.env`. Native runs must export them in the
+server process environment.
+
+
+## Testing
+
+Runtime and development dependencies are declared in `pyproject.toml`; there is
+no separate requirements file. Python 3.11 or newer is supported for local
+installation and tests; the Docker image uses Python 3.13 by default.
+
+    make install-dev
+    .local/bin/python -m pytest -q
+    .local/bin/python -m ruff check src tests
+    .local/bin/python -m mypy src/fiveserver
+    .local/bin/python -m pylint src/fiveserver --disable=all --enable=C0114,C0115,C0116
+    .local/bin/python -m radon cc src/fiveserver -s -a
+
+To audit only the runtime dependency set, use:
+
+    make audit
+
+This creates or refreshes a clean `.audit` virtual environment containing the
+project's install dependencies plus `pip-audit`, then audits that environment.
+Development tools such as pytest, pylint, ruff, mypy, and radon are deliberately
+not installed there.
+
+Set `FIVESERVER_TEST_DB_HOST` (and optional port/user/password) to run the
+disposable MariaDB and startup integration tests.
+Certificate-generation and HTTPS tests require OpenSSL. They generate temporary
+TLS pairs rather than depending on deployment keys in the repository or ZIP.
+
+MySQL integration and live-game-client checks require external services and are
+not run by the default test suite.
