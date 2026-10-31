@@ -1,0 +1,492 @@
+[
+  {
+    "source": "pes5.py",
+    "class": "NewsProtocol",
+    "packet_id": "0x2008",
+    "handler": "getNews_2008",
+    "line": 51
+  },
+  {
+    "source": "pes5.py",
+    "class": "NewsProtocol",
+    "packet_id": "0x2005",
+    "handler": "getServerList_2005",
+    "line": 52
+  },
+  {
+    "source": "pes5.py",
+    "class": "NewsProtocol",
+    "packet_id": "0x2006",
+    "handler": "getTime_2006",
+    "line": 53
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3001",
+    "handler": "do_3001",
+    "line": 481
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3003",
+    "handler": "authenticate_3003",
+    "line": 482
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3010",
+    "handler": "getProfiles_3010",
+    "line": 483
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3020",
+    "handler": "createProfile_3020",
+    "line": 484
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3030",
+    "handler": "deleteProfile_3030",
+    "line": 485
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3040",
+    "handler": "selectProfile_3040",
+    "line": 486
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3050",
+    "handler": "do_3050",
+    "line": 487
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3060",
+    "handler": "do_3060",
+    "line": 488
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3070",
+    "handler": "getMatchResults_3070",
+    "line": 489
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x308a",
+    "handler": "askForSettings_308a",
+    "line": 490
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3087",
+    "handler": "do_3087",
+    "line": 491
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3088",
+    "handler": "do_3088",
+    "line": 492
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3089",
+    "handler": "do_3089",
+    "line": 493
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3090",
+    "handler": "do_3090",
+    "line": 494
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3100",
+    "handler": "do_3100",
+    "line": 495
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x3120",
+    "handler": "do_3120",
+    "line": 496
+  },
+  {
+    "source": "pes5.py",
+    "class": "LoginService",
+    "packet_id": "0x0003",
+    "handler": "disconnect_0003",
+    "line": 497
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4100",
+    "handler": "do_4100",
+    "line": 880
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4102",
+    "handler": "getProfile_4102",
+    "line": 881
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4200",
+    "handler": "getLobbies_4200",
+    "line": 882
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4202",
+    "handler": "selectLobby_4202",
+    "line": 883
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4210",
+    "handler": "getUserList_4210",
+    "line": 884
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4300",
+    "handler": "getRoomList_4300",
+    "line": 885
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x3080",
+    "handler": "do_3080",
+    "line": 886
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4580",
+    "handler": "getFriends_4580",
+    "line": 887
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4110",
+    "handler": "setFavouriteTeam_4110",
+    "line": 888
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4114",
+    "handler": "setFavouritePlayer_4114",
+    "line": 889
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4600",
+    "handler": "searchPlayers_4600",
+    "line": 890
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4780",
+    "handler": "getInboxMessages_4780",
+    "line": 891
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x4a00",
+    "handler": "quickMatchSearch_4a00",
+    "line": 892
+  },
+  {
+    "source": "pes5.py",
+    "class": "NetworkMenuService",
+    "packet_id": "0x0003",
+    "handler": "disconnect_0003",
+    "line": 893
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4310",
+    "handler": "createRoom_4310",
+    "line": 1337
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x432a",
+    "handler": "exitRoom_432a",
+    "line": 1338
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4364",
+    "handler": "setMatchTime_4364",
+    "line": 1339
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4366",
+    "handler": "selectTeam_4366",
+    "line": 1340
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4368",
+    "handler": "goalScored_4368",
+    "line": 1341
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4370",
+    "handler": "matchExit_4370",
+    "line": 1342
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4400",
+    "handler": "chat_4400",
+    "line": 1343
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4b00",
+    "handler": "ping_4b00",
+    "line": 1344
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4320",
+    "handler": "challenge_4320",
+    "line": 1345
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4323",
+    "handler": "challengeResponse_4323",
+    "line": 1346
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4325",
+    "handler": "cancelChallenge_4325",
+    "line": 1347
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4350",
+    "handler": "relayRoomSettings_4350",
+    "line": 1348
+  },
+  {
+    "source": "pes5.py",
+    "class": "MainService",
+    "packet_id": "0x4360",
+    "handler": "toggleReady_4360",
+    "line": 1349
+  },
+  {
+    "source": "pes6.py",
+    "class": "NewsProtocol",
+    "packet_id": "0x2200",
+    "handler": "getWebServerList_2200",
+    "line": 72
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x6020",
+    "handler": "quickGameSearch_6020",
+    "line": 1067
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4110",
+    "handler": "setComment_4110",
+    "line": 1068
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4345",
+    "handler": "getStunInfo_4345",
+    "line": 1069
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4400",
+    "handler": "chat_4400",
+    "line": 1070
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4310",
+    "handler": "createRoom_4310",
+    "line": 1071
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4300",
+    "handler": "getRoomList_4300",
+    "line": 1072
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4320",
+    "handler": "joinRoom_4320",
+    "line": 1073
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4363",
+    "handler": "toggleParticipate_4363",
+    "line": 1074
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4360",
+    "handler": "startMatch_4360",
+    "line": 1075
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x436f",
+    "handler": "toggleReady_436f",
+    "line": 1076
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4369",
+    "handler": "setPlayerSettings_4369",
+    "line": 1077
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x436c",
+    "handler": "setGameSettings_436c",
+    "line": 1078
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4373",
+    "handler": "teamSelected_4373",
+    "line": 1079
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4375",
+    "handler": "goalScored_4375",
+    "line": 1080
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4377",
+    "handler": "matchStateUpdate_4377",
+    "line": 1081
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4385",
+    "handler": "matchClockUpdate_4385",
+    "line": 1082
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4349",
+    "handler": "setOwner_4349",
+    "line": 1083
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x434d",
+    "handler": "setRoomName_434d",
+    "line": 1084
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4366",
+    "handler": "becomeSpectator_4366",
+    "line": 1085
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4351",
+    "handler": "do_4351",
+    "line": 1086
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4383",
+    "handler": "backToMatchMenu_4383",
+    "line": 1087
+  },
+  {
+    "source": "pes6.py",
+    "class": "MainService",
+    "packet_id": "0x4380",
+    "handler": "forcedCancelParticipation_4380",
+    "line": 1088
+  }
+]
