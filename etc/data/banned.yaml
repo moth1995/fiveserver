@@ -1,0 +1,20 @@
+# Fiveserver / Sixserver ban list
+# Path configured in etc/conf/fiveserver.yaml → BannedList
+# Reloaded live: POST /admin/reload-config  (no restart needed)
+#
+# Supported formats (Python server and Flask layer):
+#   "75.120.4.205"      single IP
+#   "75.120.4"          24-bit shorthand  → 75.120.4.1 – 75.120.4.255
+#   "75.120.4/24"       CIDR              → same as above
+#   "75.120.4/22"       CIDR              → 75.120.4.1 – 75.120.7.255
+#   "192.168"           16-bit shorthand  → 192.168.0.1 – 192.168.255.255
+#   "192.168."          same as above (trailing dot accepted)
+#   "192.168.0.0/16"    standard CIDR     → same as above
+#
+# Note: the Go server only parses standard CIDR and plain IPs.
+# Shorthand notation ("75.120.4", "192.168") is Python/Flask only.
+
+Banned: []
+    # - "75.120.4.205"
+    # - "75.120.4/24"
+    # - "192.168.0.0/16"

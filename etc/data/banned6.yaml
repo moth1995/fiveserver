@@ -1,0 +1,8 @@
+# Sixserver ban list
+# Path configured in etc/conf/sixserver.yaml -> BannedList
+# Format is identical to etc/data/banned.yaml.
+
+Banned: []
+# - "75.120.4.205"
+# - "75.120.4/24"
+# - "192.168.0.0/16"
